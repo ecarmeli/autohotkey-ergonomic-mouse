@@ -75,22 +75,21 @@ Instead of running `ErgonomicMouse.ahk` directly, the Windows Scheduled Task poi
 ## 🛠️ Installation & Deployment
 
 ### Method A: Admin Mode (Recommended)
-Use this method if you have administrative privileges on the target machine and want the script to interact seamlessly with other software running as administrator (e.g., Task Manager, elevated terminals).
+Use this method if you have administrative privileges on the target machine and want the script to interact seamlessly with other software running as administrator (e.g., Task Manager, elevated terminals). **Note**: Method B is recommendedin  a Windows Remote Desktop Services (RDS) environment.
 
 1. Download or clone this repository to the local machine.
-2. Right-click `DeployMouse.bat` and select **Run as Administrator**.
+2. Right-click `DeployErgonomicMouse.bat` and select **Run as Administrator**.
 3. The installation script will create the target directory, provision `LaunchAndUpdater.ps1`, copy `ErgonomicMouse.ahk`, and register a Windows Scheduled Task to run silently at every user logon.
 
 ### Method B: User Mode (No UAC Requirements)
 Use this option on strictly managed corporate machines where local administrative permissions are blocked.
 
 1. Download or clone this repository to the local machine.
-2. Double-click `DeployMouse-User.bat` (No UAC prompt will appear).
+2. Double-click `DeployErgonomicMouse-User.bat` (No UAC prompt will appear).
 3. The solution installs itself entirely inside the user's `$ENV:LOCALAPPDATA` directory and registers a standard-privilege user Scheduled Task to execute silently at login.
 
 ---
 
 ## 📝 Prerequisites
 
-*   **AutoHotkey v2.x** must be installed on the machine (or its standalone directory bundled in the application path).
 *   **PowerShell 5.1+** (Native on Windows 10 and Windows 11).
