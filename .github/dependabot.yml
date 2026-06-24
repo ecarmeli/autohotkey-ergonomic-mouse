@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # 1. CI/CD STABILITY: GitHub Actions
+  # Tracks upstream action updates and security fixes for the runner environment
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    labels:
+      - "security"
+      - "ci/cd"

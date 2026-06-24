@@ -1,0 +1,45 @@
+name: Code Quality and Security Analysis
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # --- POWERSHELL QUALITY GATE ---
+  powershell_analysis:
+    name: PowerShell Script Analyzer
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Run PSScriptAnalyzer
+        uses: microsoft/psscriptanalyzer-action@v1.1
+        with:
+          path: .\
+          recurse: true
+          severity: 'Error, Warning'
+
+  # --- UNIVERSAL SECURITY GATE (TRIVY CATCHALL) ---
+  repository_security_scan:
+    name: Workspace Vulnerability & Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'           # Scan the local file system
+          scan-ref: '.'             # Start scanning from the root
+          hide-progress: false
+          format: 'table'           # Display clean diagnostic grids in the runner console
+          exit-code: '1'            # Hard-fail the pipeline if issues are found
+          ignore-unfixed: true      # Bypass CVEs that do not have a vendor patch yet
+          severity: 'CRITICAL,HIGH'
+          scanners: 'vuln,secret,config' # CATCHALL: Packages (vuln), Leaked Data (secret), & Action Files (config)
