@@ -22,7 +22,7 @@ jobs:
         with:
           path: .\
           recurse: true
-          severity: 'Error, Warning'
+          severity: '"Error", "Warning"'
 
   # --- UNIVERSAL SECURITY GATE (TRIVY CATCHALL) ---
   repository_security_scan:
