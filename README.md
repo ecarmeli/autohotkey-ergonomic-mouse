@@ -13,7 +13,7 @@ This solution rebalances that physical workload by shifting primary mouse click 
 
 ## 🛠️ Installation & Deployment
 
-### Method A: Admin Mode (Recommended)
+### Method A: System Mode (Recommended)
 Use this method if you have administrative privileges on the target machine and want the script to interact seamlessly with other software running as administrator (e.g., Task Manager, elevated terminals). **Note**: Method B is recommended in a Windows Remote Desktop Services (RDS) environment.
 
 1. Download or clone this repository to the local machine.
