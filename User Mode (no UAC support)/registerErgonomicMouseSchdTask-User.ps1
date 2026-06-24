@@ -110,8 +110,7 @@ try {
                                -Description $Description `
                                -Principal $Principal `
                                -Force `
-                               -ErrorAction Stop `
-                               -Verbose
+                               -ErrorAction Stop
 
         Write-Host "Success! '$TaskName' is ready. The tray icon will appear for users at logon." -ForegroundColor Green
 
