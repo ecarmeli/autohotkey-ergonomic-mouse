@@ -1,0 +1,35 @@
+# ==========================================
+# Operating System Files
+# ==========================================
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ==========================================
+# Editor / IDE Specific (VS Code, etc.)
+# ==========================================
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# ==========================================
+# Backups, Archives, and Temporary Files
+# ==========================================
+*.bak
+*.tmp
+*.log
+*.zip
+*.7z
+*.rar
+
+# ==========================================
+# AutoHotkey / Compilation (Optional)
+# ==========================================
+# Ignore locally compiled versions of your scripts if you use Ahk2Exe
+# ErgonomicMouse.exe
+# ErgonomicMouse-User.exe
