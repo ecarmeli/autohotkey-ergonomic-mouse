@@ -26,17 +26,25 @@ This solution rebalances that physical workload by shifting primary mouse click 
 ```text
 autohotkey-ergonomic-mouse/
 │
-├── README.md                                       # Documentation
-├── ErgonomicMouse.ahk                              # Admin mode script (Requires UAC Elevation)
-├── LaunchAndUpdater.ps1                            # Automated updater & background engine
-├── registerErgonomicMouseSchdTask.ps1              # Scheduled Task registration (Admin)
-├── DeployMouse.bat                                 # One-click Admin install wrapper
+├── .github/
+│   ├── workflows/
+│   │   └── security-and-quality.yml            # CI/CD pipeline (PSScriptAnalyzer & Trivy catchall)
+│   └── dependabot.yml                          # Automated weekly updates for GitHub Actions
 │
-└── User Mode (no UAC support)/                     # Subfolder for standard non-admin users
-    ├── ErgonomicMouse-User.ahk                     # Non-admin script variant
-    ├── LaunchAndUpdater-User.ps1                   # Non-admin automated background engine
-    ├── registerErgonomicMouseSchdTask-User.ps1     # Task registration (User)
-    └── DeployMouse-User.bat                        # One-click User install wrapper
+├── System Mode (UAC support)/                  # Machine-wide deployment (requires Admin elevation)
+│   ├── DeployErgonomicMouse.bat                # One-click Admin installation wrapper
+│   ├── ErgonomicMouse.ahk                      # Admin mode script (targets Public Documents)
+│   ├── LaunchAndUpdate.ps1                     # Cryptographic smart-updater & background engine
+│   └── registerErgonomicMouseSchdTask.ps1      # Scheduled Task registration installer
+│
+├── User Mode (no UAC support)/                 # Per-user deployment (standard non-admin privileges)
+│   ├── DeployErgonomicMouse-User.bat           # One-click User installation wrapper
+│   ├── ErgonomicMouse-User.ahk                 # User mode script (targets LocalAppData)
+│   ├── LaunchAndUpdate-User.ps1                # Cryptographic smart-updater & background engine
+│   └── registerErgonomicMouseSchdTask-User.ps1 # Scheduled Task registration installer
+│
+├── .gitignore                                  # Specifies untracked files (ignores .tmp files and logs)
+└── README.md                                   # Project documentation
 ```
 ## 🎮 Keymaps & Controls
 
