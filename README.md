@@ -11,6 +11,30 @@ This solution rebalances that physical workload by shifting primary mouse click 
 
 ---
 
+## 🛠️ Installation & Deployment
+
+### Method A: Admin Mode (Recommended)
+Use this method if you have administrative privileges on the target machine and want the script to interact seamlessly with other software running as administrator (e.g., Task Manager, elevated terminals). **Note**: Method B is recommended in a Windows Remote Desktop Services (RDS) environment.
+
+1. Download or clone this repository to the local machine.
+2. Right-click `DeployErgonomicMouse.bat` and select **Run as Administrator**.
+3. The installation script will create the target directory, provision `LaunchAndUpdater.ps1`, copy `ErgonomicMouse.ahk`, and register a Windows Scheduled Task to run silently at every user logon.
+
+### Method B: User Mode (No UAC Requirements)
+Use this option on strictly managed corporate machines where local administrative permissions are blocked.
+
+1. Download or clone this repository to the local machine.
+2. Double-click `DeployErgonomicMouse-User.bat` (No UAC prompt will appear).
+3. The solution installs itself entirely inside the user's `$ENV:LOCALAPPDATA` directory and registers a standard-privilege user Scheduled Task to execute silently at login.
+
+---
+
+## 📝 Prerequisites
+
+*   **PowerShell 5.1+** (Native on Windows 10 and Windows 11).
+
+---
+
 ## 🚀 Key Features
 
 *   **Anti-Repeat Logic:** Prevents Windows keyboard auto-repeat from triggering multiple rapid mouse clicks when holding down a hotkey.
@@ -69,27 +93,3 @@ Instead of running `ErgonomicMouse.ahk` directly, the Windows Scheduled Task poi
 3. **Hot-Swap:** It overwrites the local copy of `ErgonomicMouse.ahk`.
 4. **Execution:** It spins up the AutoHotkey executable to load the freshly updated script safely.
 5. **Offline Resiliency:** If you are offline (e.g., on an airplane or disconnected from corporate network infrastructure), the script fails silently within 8 seconds and immediately launches the local cached version so your peripheral setup never stops working.
-
----
-
-## 🛠️ Installation & Deployment
-
-### Method A: Admin Mode (Recommended)
-Use this method if you have administrative privileges on the target machine and want the script to interact seamlessly with other software running as administrator (e.g., Task Manager, elevated terminals). **Note**: Method B is recommendedin  a Windows Remote Desktop Services (RDS) environment.
-
-1. Download or clone this repository to the local machine.
-2. Right-click `DeployErgonomicMouse.bat` and select **Run as Administrator**.
-3. The installation script will create the target directory, provision `LaunchAndUpdater.ps1`, copy `ErgonomicMouse.ahk`, and register a Windows Scheduled Task to run silently at every user logon.
-
-### Method B: User Mode (No UAC Requirements)
-Use this option on strictly managed corporate machines where local administrative permissions are blocked.
-
-1. Download or clone this repository to the local machine.
-2. Double-click `DeployErgonomicMouse-User.bat` (No UAC prompt will appear).
-3. The solution installs itself entirely inside the user's `$ENV:LOCALAPPDATA` directory and registers a standard-privilege user Scheduled Task to execute silently at login.
-
----
-
-## 📝 Prerequisites
-
-*   **PowerShell 5.1+** (Native on Windows 10 and Windows 11).
