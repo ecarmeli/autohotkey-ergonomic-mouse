@@ -158,7 +158,6 @@ if errorlevel 1 goto SYS_INSTALL
 
 
 :SYS_INSTALL
-:: POLITE INTERCEPTION
 if "!USER_INSTALLED!"=="1" (
     cls
     echo ===================================================
@@ -178,16 +177,61 @@ echo ===================================================
 echo  Action Selected: Install/Update System-Mode
 echo ===================================================
 echo.
-powershell -NoProfile -ExecutionPolicy Bypass -File "bin\registerErgonomicMouseSchdTask.ps1"
+
+echo [State Check] 1. Pre-Requisites ^& Environment...
+set "STATUS_ENV=SUCCESS"
+if exist "%ProgramFiles%\AutoHotkey\v2\AutoHotkey64.exe" (
+    echo   - AutoHotkey Engine... Found
+) else (
+    echo   - AutoHotkey Engine... Not found. Downloading and installing...
+)
+
+:: Execute payload setup silently in background
+powershell -NoProfile -ExecutionPolicy Bypass -File "bin\registerErgonomicMouseSchdTask.ps1" >nul 2>&1
+set "EXEC_RESULT=!ERRORLEVEL!"
+
+echo.
+echo [State Check] 2. Directory ^& Payload Provisioning...
+set "STATUS_FILES=FAILED"
+if exist "%PUBLIC%\Documents\Scripts\ErgonomicMouse.ahk" (
+    if exist "%PUBLIC%\Documents\Scripts\LaunchAndUpdate.ps1" (
+        set "STATUS_FILES=SUCCESS"
+        echo   - Provisioning script payloads... SUCCESS
+    )
+)
+if "!STATUS_FILES!"=="FAILED" echo   - Provisioning script payloads... FAILED
+
+echo.
+echo [State Check] 3. Windows Scheduled Task...
+set "STATUS_TASK=FAILED"
+schtasks /Query /TN "ErgonomicMouseMapping" >nul 2>&1
 if !ERRORLEVEL! equ 0 (
+    if !EXEC_RESULT! equ 0 (
+        set "STATUS_TASK=SUCCESS"
+        echo   - Registering system service task... SUCCESS
+    )
+)
+if "!STATUS_TASK!"=="FAILED" echo   - Registering system service task... FAILED
+
+echo.
+echo ===================================================
+echo  System Install Summary Report
+echo ===================================================
+echo  Environment  : !STATUS_ENV!
+echo  Payloads     : !STATUS_FILES!
+echo  Service Task : !STATUS_TASK!
+echo ===================================================
+
+if "!STATUS_FILES!"=="SUCCESS" if "!STATUS_TASK!"=="SUCCESS" (
     echo.
-    echo [RESULT] SUCCESS: System deployment completed.
+    echo [RESULT] SUCCESS: System-Mode deployment completed.
+    echo          Press Scroll Lock to toggle mappings.
 ) else (
     echo.
-    echo [RESULT] FAILED: Deployment script encountered an error.
+    echo [RESULT] ERROR: One or more deployment steps failed.
 )
 echo.
-powershell Start-Sleep -Seconds 4
+pause
 goto MAIN_MENU
 
 
@@ -198,7 +242,16 @@ echo  Action Selected: System Standard Uninstall
 echo ===================================================
 echo.
 call :SYS_CLEANUP_SCRIPTS
-set "STATUS_ENGINE=SKIPPED (Preserved by choice)"
+echo.
+echo [State Check] 4. AutoHotkey engine...
+
+if exist "%ProgramFiles%\AutoHotkey\v2\AutoHotkey64.exe" (
+    echo   - Preserving AutoHotkey engine core by choice.
+    set "STATUS_ENGINE=SKIPPED (Preserved)"
+) else (
+    echo   - AutoHotkey engine core is not found. Skipping removal.
+    set "STATUS_ENGINE=SKIPPED (Not found)"
+)
 goto SYS_PRINT_SUMMARY
 
 
@@ -217,7 +270,7 @@ if exist "%ProgramFiles%\AutoHotkey\v2" (
     rmdir "%ProgramFiles%\AutoHotkey" >nul 2>&1
     if exist "%ProgramFiles%\AutoHotkey\v2" ( set "STATUS_ENGINE=FAILED (Files may be in use)" ) else ( set "STATUS_ENGINE=SUCCESS" )
 ) else (
-    echo   - No AutoHotkey engine found. Skipping removal.
+    echo   - AutoHotkey engine core is not found. Skipping removal.
     set "STATUS_ENGINE=SKIPPED (Not found)"
 )
 goto SYS_PRINT_SUMMARY
@@ -344,7 +397,6 @@ if errorlevel 1 goto USER_INSTALL
 
 
 :USER_INSTALL
-:: POLITE INTERCEPTION
 if "!SYS_INSTALLED!"=="1" (
     cls
     echo ===================================================
@@ -364,17 +416,60 @@ echo ===================================================
 echo  Action Selected: Install/Update User-Mode
 echo ===================================================
 echo.
+
+echo [State Check] 1. Pre-Requisites ^& Environment...
+set "STATUS_ENV=SUCCESS"
+if exist "%LOCALAPPDATA%\ErgonomicMouse\AutoHotkey64.exe" (
+    echo   - AutoHotkey Engine... Found
+) else (
+    echo   - AutoHotkey Engine... Not found. Downloading and installing...
+)
+
+:: Execute the payload and user folder setup silently 
 set "DEPLOY_SCRIPT=%~dp0bin\registerErgonomicMouseSchdTask-User.ps1"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "& $env:DEPLOY_SCRIPT"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& $env:DEPLOY_SCRIPT" >nul 2>&1
+set "EXEC_RESULT=!ERRORLEVEL!"
+
+echo.
+echo [State Check] 2. Directory ^& Payload Provisioning...
+set "STATUS_FILES=FAILED"
+if exist "%LOCALAPPDATA%\ErgonomicMouse" (
+    set "STATUS_FILES=SUCCESS"
+    echo   - Provisioning sandboxed user directories... SUCCESS
+)
+if "!STATUS_FILES!"=="FAILED" echo   - Provisioning sandboxed user directories... FAILED
+
+echo.
+echo [State Check] 3. Windows Scheduled Task...
+set "STATUS_TASK=FAILED"
+schtasks /Query /TN "ErgonomicMouseMapping-User" >nul 2>&1
 if !ERRORLEVEL! equ 0 (
+    if !EXEC_RESULT! equ 0 (
+        set "STATUS_TASK=SUCCESS"
+        echo   - Registering user service task... SUCCESS
+    )
+)
+if "!STATUS_TASK!"=="FAILED" echo   - Registering user service task... FAILED
+
+echo.
+echo ===================================================
+echo  User Install Summary Report
+echo ===================================================
+echo  Environment  : !STATUS_ENV!
+echo  Payloads     : !STATUS_FILES!
+echo  Service Task : !STATUS_TASK!
+echo ===================================================
+
+if "!STATUS_FILES!"=="SUCCESS" if "!STATUS_TASK!"=="SUCCESS" (
     echo.
-    echo [RESULT] SUCCESS: User deployment completed.
+    echo [RESULT] SUCCESS: User-Mode deployment completed.
+    echo          Press Scroll Lock to toggle mappings.
 ) else (
     echo.
-    echo [RESULT] FAILED: Deployment script encountered an error.
+    echo [RESULT] ERROR: One or more deployment steps failed.
 )
 echo.
-powershell Start-Sleep -Seconds 4
+pause
 goto MAIN_MENU
 
 
