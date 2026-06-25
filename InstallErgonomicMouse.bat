@@ -18,32 +18,31 @@ if "%~1"=="/System" goto SYSTEM_MENU
 :: =========================================================================
 :MAIN_MENU
 call :CHECK_STATE
-set "MODE=!ACTIVE_MODE!"
 cls
 echo ===================================================
 echo  Ergonomic Mouse Manager (Unified)
 echo ===================================================
 echo.
 
-echo  Current Detection Status:
-if "!SYS_INSTALLED!"=="1" ( echo   - System-Mode : [INSTALLED] ) else ( echo   - System-Mode : [Not Installed] )
-if "!USER_INSTALLED!"=="1" ( echo   - User-Mode   : [INSTALLED] ) else ( echo   - User-Mode   : [Not Installed] )
-
-echo.
-
 if "!ACTIVE_MODE!"=="SYSTEM" (
-    echo  NOTE: System-Mode is active.
-    echo        To switch to User-Mode, uninstall System-Mode first.
+    echo  Status: System-Mode is Installed.
+) else if "!ACTIVE_MODE!"=="USER" (
+    echo  Status: User-Mode is Installed.
+) else if "!ACTIVE_MODE!"=="CONFLICT" (
+    echo  WARNING: BOTH modes are currently installed.
+    echo           Please enter the menus below and uninstall one.
+) else (
+    echo.
 )
 
-if "!ACTIVE_MODE!"=="USER" (
-    echo  NOTE: User-Mode is active.
-    echo        To switch to System-Mode, uninstall User-Mode first.
-)
+if "!IS_ELEVATED!"=="1" ( echo  Privilege: [Administrator] ) else ( echo  Privilege: [Standard User] )
 
-if "!ACTIVE_MODE!"=="CONFLICT" (
-    echo  WARNING: Both System-Mode and User-Mode appear installed.
-    echo           Please uninstall one mode before proceeding.
+:: Display the elevation warning if applicable
+if "!IS_ELEVATED!"=="1" if "!ACTIVE_MODE!" neq "SYSTEM" (
+    echo.
+    echo  SECURITY LOCK: You are running as Administrator. User-Mode 
+    echo  options have been hidden to prevent permission corruption.
+    echo  Close this window and run normally to access User-Mode.
 )
 
 echo.
@@ -56,35 +55,24 @@ set "OPT_USER="
 set "OPT_EXIT="
 set "IDX=1"
 
-:: System option
-if "!ACTIVE_MODE!"=="USER" goto SYS_LOCKED
-
+:: System Option
+if "!ACTIVE_MODE!"=="USER" goto SKIP_SYS
 echo  [!IDX!] Manage System-Mode Deployment (Requires Admin)
 set "MENU_CHOICES=!MENU_CHOICES!!IDX!"
 set "OPT_SYS=!IDX!"
 set /a IDX+=1
-goto SYS_DONE
+:SKIP_SYS
 
-:SYS_LOCKED
-echo  [ ] Manage System-Mode Deployment - (Locked: Remove User-Mode First)
-
-:SYS_DONE
-
-:: User option
-if /I "!ACTIVE_MODE!"=="SYSTEM" goto USER_LOCKED
-
+:: User Option
+if "!ACTIVE_MODE!"=="SYSTEM" goto SKIP_USER
+if "!IS_ELEVATED!"=="1" goto SKIP_USER
 echo  [!IDX!] Manage User-Mode Deployment
 set "MENU_CHOICES=!MENU_CHOICES!!IDX!"
 set "OPT_USER=!IDX!"
 set /a IDX+=1
-goto USER_DONE
+:SKIP_USER
 
-:USER_LOCKED
-echo  [ ] Manage User-Mode Deployment - (Locked: Remove System-Mode First)
-
-:USER_DONE
-
-:: Exit option (always available)
+:: Exit Option (Always available)
 echo  [!IDX!] Exit
 set "MENU_CHOICES=!MENU_CHOICES!!IDX!"
 set "OPT_EXIT=!IDX!"
@@ -92,11 +80,10 @@ set "OPT_EXIT=!IDX!"
 echo.
 choice /C !MENU_CHOICES! /N /M "Select an option: "
 
-:: Routing (in descending priority order!)
+:: Routing (must check in descending priority order!)
 if defined OPT_EXIT if errorlevel !OPT_EXIT! goto END
 if defined OPT_USER if errorlevel !OPT_USER! goto USER_MENU
 if defined OPT_SYS if errorlevel !OPT_SYS! goto SYSTEM_MENU_INIT
-
 goto END
 
 
@@ -106,6 +93,11 @@ goto END
 :CHECK_STATE
 set "SYS_INSTALLED=0"
 set "USER_INSTALLED=0"
+set "IS_ELEVATED=0"
+
+:: Check for Elevation
+net session >nul 2>&1
+if !ERRORLEVEL! equ 0 set "IS_ELEVATED=1"
 
 :: Check for System Mode footprints
 schtasks /Query /TN "ErgonomicMouseMapping" >nul 2>&1
@@ -196,7 +188,7 @@ if !ERRORLEVEL! equ 0 (
 )
 echo.
 powershell Start-Sleep -Seconds 4
-goto END
+goto MAIN_MENU
 
 
 :SYS_UNINSTALL_STD
@@ -218,6 +210,7 @@ echo ===================================================
 echo.
 call :SYS_CLEANUP_SCRIPTS
 echo.
+echo [State Check] 4. AutoHotkey engine...
 if exist "%ProgramFiles%\AutoHotkey\v2" (
     echo   - AutoHotkey engine found. Removing...
     rmdir /S /Q "%ProgramFiles%\AutoHotkey\v2" >nul 2>&1
@@ -246,13 +239,15 @@ if "!STATUS_TASK!"=="FAILED" set "ANY_FAIL=1"
 if "!STATUS_FILES!"=="FAILED (Some files locked)" set "ANY_FAIL=1"
 if "!STATUS_ENGINE!"=="FAILED (Files may be in use)" set "ANY_FAIL=1"
 if "!ANY_FAIL!"=="1" (
+    echo.
     echo [RESULT] WARNING: One or more cleanup steps failed.
 ) else (
+    echo.
     echo [RESULT] SUCCESS: System components were cleanly removed.
 )
 echo.
 pause
-goto END
+goto MAIN_MENU
 
 
 :SYS_CLEANUP_SCRIPTS
@@ -265,7 +260,7 @@ if !ERRORLEVEL! equ 0 (
     tasklist /FI "IMAGENAME eq AutoHotkey64.exe" 2>NUL | find /I "AutoHotkey64.exe" >NUL
     if !ERRORLEVEL! equ 0 ( set "STATUS_PROCESS=FAILED" ) else ( set "STATUS_PROCESS=SUCCESS" )
 ) else (
-    echo   - No processes found.
+    echo   - No processes found. Skipping termination.
     set "STATUS_PROCESS=SKIPPED (Not running)"
 )
 
@@ -278,7 +273,7 @@ if !ERRORLEVEL! equ 0 (
     schtasks /Query /TN "ErgonomicMouseMapping" >nul 2>&1
     if !ERRORLEVEL! equ 0 ( set "STATUS_TASK=FAILED" ) else ( set "STATUS_TASK=SUCCESS" )
 ) else (
-    echo   - Task not found.
+    echo   - Task not found. Skipping removal.
     set "STATUS_TASK=SKIPPED (Not found)"
 )
 
@@ -295,11 +290,11 @@ for %%F in ("ErgonomicMouse.ahk" "LaunchAndUpdate.ps1" "registerErgonomicMouseSc
 )
 if "!FILES_FOUND!"=="1" (
     if "!FILES_FAILED!"=="1" ( set "STATUS_FILES=FAILED (Some files locked)" ) else (
-        echo   - Scripts removed successfully.
+        echo   - Removing scripts...
         set "STATUS_FILES=SUCCESS"
     )
 ) else (
-    echo   - No scripts found.
+    echo   - No scripts found. Skipping removal.
     set "STATUS_FILES=SKIPPED (None found)"
 )
 exit /b
@@ -310,6 +305,23 @@ exit /b
 :: =========================================================================
 :USER_MENU
 call :CHECK_STATE
+
+if "!IS_ELEVATED!"=="1" (
+    cls
+    echo ===================================================
+    echo  Access Restricted: Elevation Mismatch
+    echo ===================================================
+    echo.
+    echo  You are currently running this script as an Administrator.
+    echo  Managing User-Mode deployments while elevated will corrupt 
+    echo  the permissions of your scheduled tasks and folders.
+    echo.
+    echo  Please exit this window and run the script normally.
+    echo.
+    pause
+    goto MAIN_MENU
+)
+
 cls
 echo ===================================================
 echo  User-Mode Manager
@@ -332,6 +344,21 @@ if errorlevel 1 goto USER_INSTALL
 
 
 :USER_INSTALL
+:: POLITE INTERCEPTION
+if "!SYS_INSTALLED!"=="1" (
+    cls
+    echo ===================================================
+    echo  Installation Locked
+    echo ===================================================
+    echo.
+    echo  A System-Mode deployment is currently active on this machine.
+    echo  To prevent system conflicts, please completely uninstall the 
+    echo  System-Mode version before attempting a User-Mode installation.
+    echo.
+    pause
+    goto USER_MENU
+)
+
 cls
 echo ===================================================
 echo  Action Selected: Install/Update User-Mode
@@ -348,7 +375,7 @@ if !ERRORLEVEL! equ 0 (
 )
 echo.
 powershell Start-Sleep -Seconds 4
-goto END
+goto MAIN_MENU
 
 
 :USER_UNINSTALL
@@ -366,7 +393,7 @@ if !ERRORLEVEL! equ 0 (
     tasklist /FI "IMAGENAME eq AutoHotkey64.exe" 2>NUL | find /I "AutoHotkey64.exe" >NUL
     if !ERRORLEVEL! equ 0 ( set "STATUS_PROCESS=FAILED" ) else ( set "STATUS_PROCESS=SUCCESS" )
 ) else (
-    echo   - No processes found.
+    echo   - No processes found. Skipping termination.
     set "STATUS_PROCESS=SKIPPED (Not running)"
 )
 
@@ -379,7 +406,7 @@ if !ERRORLEVEL! equ 0 (
     schtasks /Query /TN "ErgonomicMouseMapping-User" >nul 2>&1
     if !ERRORLEVEL! equ 0 ( set "STATUS_TASK=FAILED" ) else ( set "STATUS_TASK=SUCCESS" )
 ) else (
-    echo   - Task not found.
+    echo   - Task not found. Skipping removal.
     set "STATUS_TASK=SKIPPED (Not found)"
 )
 
@@ -390,7 +417,7 @@ if exist "%LOCALAPPDATA%\ErgonomicMouse" (
     rmdir /S /Q "%LOCALAPPDATA%\ErgonomicMouse" >nul 2>&1
     if exist "%LOCALAPPDATA%\ErgonomicMouse" ( set "STATUS_FILES=FAILED (Files may be in use)" ) else ( set "STATUS_FILES=SUCCESS" )
 ) else (
-    echo   - Application folder not found.
+    echo   - Application folder not found. Skipping removal.
     set "STATUS_FILES=SKIPPED (Not found)"
 )
 
@@ -408,13 +435,15 @@ if "!STATUS_TASK!"=="FAILED" set "ANY_FAIL=1"
 if "!STATUS_FILES!"=="FAILED (Files may be in use)" set "ANY_FAIL=1"
 
 if "!ANY_FAIL!"=="1" (
+    echo.
     echo [RESULT] WARNING: One or more cleanup steps failed.
 ) else (
+    echo.
     echo [RESULT] SUCCESS: User components were cleanly removed.
 )
 echo.
 pause
-goto END
+goto MAIN_MENU
 
 :END
 exit /b

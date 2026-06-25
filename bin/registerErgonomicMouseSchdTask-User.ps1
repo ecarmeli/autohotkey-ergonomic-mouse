@@ -3,7 +3,7 @@
     $TargetDir            = "$env:LOCALAPPDATA\ErgonomicMouse"
     $AHKDir               = "$TargetDir\AutoHotkey"
     $AHKExecutable        = "$AHKDir\AutoHotkey64.exe"
-    $AHKScriptFileName    = "ErgonomicMouse-User.ahk"
+    $AHKScriptFileName    = "ErgonomicMouse.ahk"
     $AHKScriptTargetPath  = "$TargetDir\$AHKScriptFileName"
     $LauncherFileName     = "LaunchAndUpdate-User.ps1"
     $LauncherTargetPath   = "$TargetDir\$LauncherFileName"

@@ -1,15 +1,8 @@
-﻿#SingleInstance Force
+﻿#Requires AutoHotkey >=2.0 64-bit
+#SingleInstance Force
 
 ; --- F5/F6/F7 mouse mapping with anti-repeat, micro‑nudge, auto‑elevate,
 ;     and Scroll Lock master enable/disable (AHK v2) ---
-
-; --- Auto‑elevate so injected events reach elevated windows ---
-if !A_IsAdmin {
-    try {
-        Run('*RunAs "' A_ScriptFullPath '"')
-        ExitApp
-    }
-}
 
 ; Fix for multi-monitor jumps: makes the script aware of different monitor scaling
 DllCall("SetThreadDpiAwarenessContext", "ptr", -3)
@@ -158,13 +151,28 @@ DoHorizontalScroll(delta) {
     CoordMode("Mouse", "Screen")
     MouseGetPos(&mX, &mY, &mWin, &mCtrlHwnd, 2)
     
-    ; Pack the high-precision fractional delta (40 instead of 120)
-    wParam := (delta << 16) & 0xFFFFFFFF
-    lParam := ((mY & 0xFFFF) << 16) | (mX & 0xFFFF)
+    ; Check if the target window belongs to VS Code or another Electron/Chromium app
+    try {
+        processName := WinGetProcessName("ahk_id " mWin)
+    } catch {
+        processName := ""
+    }
     
-    targetHwnd := mCtrlHwnd ? mCtrlHwnd : mWin
-    
-    PostMessage(0x020E, wParam, lParam, , "ahk_id " targetHwnd)
+    ; If it's VS Code (or Chrome/Edge), inject a native OS Wheel event instead of PostMessage
+    if (processName = "code.exe" || processName = "chrome.exe" || processName = "msedge.exe") {
+        if (delta < 0) {
+            Click("WheelLeft")
+        } else {
+            Click("WheelRight")
+        }
+    } else {
+        ; Fallback to your high-precision Win32 Direct Messaging for native Windows apps
+        wParam := (delta << 16) & 0xFFFFFFFF
+        lParam := ((mY & 0xFFFF) << 16) | (mX & 0xFFFF)
+        targetHwnd := mCtrlHwnd ? mCtrlHwnd : mWin
+        
+        PostMessage(0x020E, wParam, lParam, , "ahk_id " targetHwnd)
+    }
 }
 
 ; --- GHOSTING / INERTIA BLOCKER ---
