@@ -89,7 +89,7 @@ try {
         }
 
         # Write the new file and the new ETag to disk
-        $Response.Content | Set-Content -Path "$AHKScriptTargetPath.tmp" -Encoding UTF8 -Force # Write to a temporary file first to avoid corrupting the existing script if the download fails
+        [System.IO.File]::WriteAllText("$AHKScriptTargetPath.tmp", $Response.Content, (New-Object System.Text.UTF8Encoding($false))) # Write to a temporary file first to avoid corrupting the existing script if the download fails. Write the new file using native .NET to guarantee a clean UTF-8 output (No Byte Order Mark) 
         Move-Item "$AHKScriptTargetPath.tmp" $AHKScriptTargetPath -Force # Move the temporary file to the final destination, overwriting the old script
         if ($RemoteETag) { # If GitHub provided an ETag, save it to the ETag file for future comparisons
             $RemoteETag | Set-Content -Path "$ETagFile.tmp" -Force

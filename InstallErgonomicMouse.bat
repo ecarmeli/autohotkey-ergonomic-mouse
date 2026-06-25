@@ -281,7 +281,7 @@ echo.
 echo [State Check] 3. Application Scripts...
 set "FILES_FOUND=0"
 set "FILES_FAILED=0"
-for %%F in ("ErgonomicMouse.ahk" "LaunchAndUpdate.ps1" "registerErgonomicMouseSchdTask.ps1" "update.log" "ErgonomicMouse.ahk.tmp") do (
+for %%F in ("ErgonomicMouse.ahk" "LaunchAndUpdate.ps1" "registerErgonomicMouseSchdTask.ps1" "update.log" "ErgonomicMouse.ahk.tmp" "ErgonomicMouse.ahk.etag") do (
     if exist "%PUBLIC%\Documents\Scripts\%%~F" (
         set "FILES_FOUND=1"
         del /Q /F "%PUBLIC%\Documents\Scripts\%%~F" >nul 2>&1
