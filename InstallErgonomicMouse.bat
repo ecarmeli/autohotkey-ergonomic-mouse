@@ -102,7 +102,7 @@ if !ERRORLEVEL! equ 0 set "IS_ELEVATED=1"
 :: Check for System Mode footprints
 schtasks /Query /TN "ErgonomicMouseMapping" >nul 2>&1
 if !ERRORLEVEL! equ 0 set "SYS_INSTALLED=1"
-if exist "%PUBLIC%\Documents\Scripts\ErgonomicMouse.ahk" set "SYS_INSTALLED=1"
+if exist "%ProgramData%\ErgonomicMouse\ErgonomicMouse.ahk" set "SYS_INSTALLED=1"
 
 :: Check for User Mode footprints
 schtasks /Query /TN "ErgonomicMouseMapping-User" >nul 2>&1
@@ -146,7 +146,7 @@ if "!USER_INSTALLED!"=="1" (
     echo  [1] Install or Update System Deployment
 )
 echo  [2] Standard Uninstall (Keep AutoHotkey Engine)
-echo  [3] Full Uninstall (Remove Scripts AND Engine)
+echo  [3] Full Uninstall (Remove Application Directory AND Engine)
 echo  [4] Back to Main Menu
 echo.
 choice /C 1234 /N /M "Select an option (1-4): "
@@ -183,23 +183,23 @@ set "STATUS_ENV=SUCCESS"
 if exist "%ProgramFiles%\AutoHotkey\v2\AutoHotkey64.exe" (
     echo   - AutoHotkey Engine... Found
 ) else (
-    echo   - AutoHotkey Engine... Not found. Downloading and installing...
+    echo   - Downloading and installing AutoHotkey Engine...
 )
 
 :: Execute payload setup silently in background
-powershell -NoProfile -ExecutionPolicy Bypass -File "bin\registerErgonomicMouseSchdTask.ps1" >nul 2>&1
+bin\DeployManager.exe >nul 2>&1
 set "EXEC_RESULT=!ERRORLEVEL!"
 
 echo.
 echo [State Check] 2. Directory ^& Payload Provisioning...
 set "STATUS_FILES=FAILED"
-if exist "%PUBLIC%\Documents\Scripts\ErgonomicMouse.ahk" (
-    if exist "%PUBLIC%\Documents\Scripts\LaunchAndUpdate.ps1" (
+if exist "%ProgramData%\ErgonomicMouse\ErgonomicMouse.ahk" (
+    if exist "%ProgramData%\ErgonomicMouse\Launcher.exe" (
         set "STATUS_FILES=SUCCESS"
-        echo   - Provisioning script payloads... SUCCESS
+        echo   - Application payloads... SUCCESS
     )
 )
-if "!STATUS_FILES!"=="FAILED" echo   - Provisioning script payloads... FAILED
+if "!STATUS_FILES!"=="FAILED" echo   - Application payloads... FAILED
 
 echo.
 echo [State Check] 3. Windows Scheduled Task...
@@ -241,7 +241,7 @@ echo ===================================================
 echo  Action Selected: System Standard Uninstall
 echo ===================================================
 echo.
-call :SYS_CLEANUP_SCRIPTS
+call :SYS_CLEANUP_APP
 echo.
 echo [State Check] 4. AutoHotkey engine...
 
@@ -261,7 +261,7 @@ echo ===================================================
 echo  Action Selected: System Full Uninstall
 echo ===================================================
 echo.
-call :SYS_CLEANUP_SCRIPTS
+call :SYS_CLEANUP_APP
 echo.
 echo [State Check] 4. AutoHotkey engine...
 if exist "%ProgramFiles%\AutoHotkey\v2" (
@@ -303,7 +303,7 @@ pause
 goto MAIN_MENU
 
 
-:SYS_CLEANUP_SCRIPTS
+:SYS_CLEANUP_APP
 echo [State Check] 1. Active AutoHotkey Processes...
 tasklist /FI "IMAGENAME eq AutoHotkey64.exe" 2>NUL | find /I "AutoHotkey64.exe" >NUL
 if !ERRORLEVEL! equ 0 (
@@ -331,25 +331,22 @@ if !ERRORLEVEL! equ 0 (
 )
 
 echo.
-echo [State Check] 3. Application Scripts...
-set "FILES_FOUND=0"
-set "FILES_FAILED=0"
-for %%F in ("ErgonomicMouse.ahk" "LaunchAndUpdate.ps1" "registerErgonomicMouseSchdTask.ps1" "update.log" "ErgonomicMouse.ahk.tmp" "ErgonomicMouse.ahk.etag") do (
-    if exist "%PUBLIC%\Documents\Scripts\%%~F" (
-        set "FILES_FOUND=1"
-        del /Q /F "%PUBLIC%\Documents\Scripts\%%~F" >nul 2>&1
-        if exist "%PUBLIC%\Documents\Scripts\%%~F" ( set "FILES_FAILED=1" )
-    )
-)
-if "!FILES_FOUND!"=="1" (
-    if "!FILES_FAILED!"=="1" ( set "STATUS_FILES=FAILED (Some files locked)" ) else (
-        echo   - Removing scripts...
+echo [State Check] 3. Application Directory...
+if exist "%ProgramData%\ErgonomicMouse\" (
+    
+    echo   - Removing ErgonomicMouse directory and all contents...
+    rmdir /S /Q "%ProgramData%\ErgonomicMouse" >nul 2>&1
+    
+    if exist "%ProgramData%\ErgonomicMouse\" ( 
+        set "STATUS_FILES=FAILED (Folder or files locked)" 
+    ) else (
         set "STATUS_FILES=SUCCESS"
     )
 ) else (
-    echo   - No scripts found. Skipping removal.
+    echo   - Application directory not found. Skipping removal.
     set "STATUS_FILES=SKIPPED (None found)"
 )
+
 exit /b
 
 
@@ -422,12 +419,11 @@ set "STATUS_ENV=SUCCESS"
 if exist "%LOCALAPPDATA%\ErgonomicMouse\AutoHotkey64.exe" (
     echo   - AutoHotkey Engine... Found
 ) else (
-    echo   - AutoHotkey Engine... Not found. Downloading and installing...
+    echo   - Downloading and installing AutoHotkey Engine...
 )
 
-:: Execute the payload and user folder setup silently 
-set "DEPLOY_SCRIPT=%~dp0bin\registerErgonomicMouseSchdTask-User.ps1"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "& $env:DEPLOY_SCRIPT" >nul 2>&1
+:: Execute DeployManager silently in User Mode
+bin\DeployManager.exe --mode=user >nul 2>&1
 set "EXEC_RESULT=!ERRORLEVEL!"
 
 echo.
