@@ -24,7 +24,7 @@ import (
 // =========================================================================
 
 const (
-	ahkZipUrl = "https://www.autohotkey.com/download/ahk-v2.zip"
+	ahkZipURL = "https://www.autohotkey.com/download/ahk-v2.zip"
 
 	// Windows Task Scheduler COM Enums
 	TaskActionExec       = 0
@@ -49,6 +49,7 @@ type Config struct {
 	LauncherDest string
 	ZipPath      string
 	ExeDir       string
+	LogPath      string
 	TaskName     string
 	Description  string
 	UserContext  string
@@ -60,6 +61,10 @@ type Config struct {
 func buildConfig() (*Config, error) {
 	mode := flag.String("mode", "system", "Installation mode: 'system' or 'user'")
 	flag.Parse()
+
+	if *mode != "system" && *mode != "user" {
+		return nil, fmt.Errorf("invalid mode %q: expected 'system' or 'user'", *mode)
+	}
 
 	exePath, err := os.Executable()
 	exeDir := "."
@@ -74,23 +79,42 @@ func buildConfig() (*Config, error) {
 	}
 
 	if cfg.Mode == "user" {
+		localAppData, err := requiredEnv("LOCALAPPDATA")
+		if err != nil {
+			return nil, err
+		}
+
+		user, err := requiredEnv("USERNAME")
+		if err != nil {
+			return nil, err
+		}
+
 		cfg.IsSystem = false
-		cfg.TargetDir = filepath.Join(os.Getenv("LOCALAPPDATA"), "ErgonomicMouse")
+		cfg.TargetDir = filepath.Join(localAppData, "ErgonomicMouse")
 		cfg.AHKDir = filepath.Join(cfg.TargetDir, "AutoHotkey")
 		cfg.TaskName = "ErgonomicMouseMapping-User"
 		cfg.Description = "Runs the ergonomic mouse remapping script (F5/F6/F7) for the current user."
 
 		domain := os.Getenv("USERDOMAIN")
-		user := os.Getenv("USERNAME")
-		if domain != "" && user != "" {
+		if domain != "" {
 			cfg.UserContext = domain + "\\" + user
 		} else {
 			cfg.UserContext = user
 		}
 	} else {
+		programData, err := requiredEnv("ProgramData")
+		if err != nil {
+			return nil, err
+		}
+
+		programFiles, err := requiredEnv("ProgramFiles")
+		if err != nil {
+			return nil, err
+		}
+
 		cfg.IsSystem = true
-		cfg.TargetDir = filepath.Join(os.Getenv("ProgramData"), "ErgonomicMouse")
-		cfg.AHKDir = filepath.Join(os.Getenv("ProgramFiles"), "AutoHotkey", "v2")
+		cfg.TargetDir = filepath.Join(programData, "ErgonomicMouse")
+		cfg.AHKDir = filepath.Join(programFiles, "AutoHotkey", "v2")
 		cfg.TaskName = "ErgonomicMouseMapping"
 		cfg.Description = "Runs the ergonomic mouse remapping script (F5/F6/F7) for all users."
 	}
@@ -99,6 +123,7 @@ func buildConfig() (*Config, error) {
 	cfg.ScriptDest = filepath.Join(cfg.TargetDir, "ErgonomicMouse.ahk")
 	cfg.LauncherDest = filepath.Join(cfg.TargetDir, "Launcher.exe")
 	cfg.ZipPath = filepath.Join(cfg.TargetDir, "ahk-v2.zip")
+	cfg.LogPath = filepath.Join(cfg.TargetDir, "logs", "install.log")
 
 	return cfg, nil
 }
@@ -106,6 +131,15 @@ func buildConfig() (*Config, error) {
 // =========================================================================
 // 3. Helper Functions
 // =========================================================================
+
+// requiredEnv retrieves the value of an environment variable and returns an error if it's not set
+func requiredEnv(name string) (string, error) {
+	value := os.Getenv(name)
+	if value == "" {
+		return "", fmt.Errorf("required environment variable %s is not set", name)
+	}
+	return value, nil
+}
 
 // isAdmin checks if the current process has administrative privileges
 func isAdmin() bool {
@@ -143,14 +177,23 @@ func fileExists(filename string) bool {
 }
 
 // setupFileLogging configures logging to both stdout and a log file in the target directory
-func setupFileLogging(targetDir string) *os.File {
-	logPath := filepath.Join(targetDir, "deploy_manager.log")
+func setupFileLogging(logPath string) *os.File {
+	logDir := filepath.Dir(logPath)
+
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		log.SetOutput(os.Stdout)
+		log.Printf("Warning: could not create log directory %s: %v", logDir, err)
+		return nil
+	}
+
 	file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err == nil {
 		log.SetOutput(io.MultiWriter(os.Stdout, file))
 	} else {
 		log.SetOutput(os.Stdout)
+		log.Printf("Warning: could not open log file %s: %v", logPath, err)
 	}
+
 	return file
 }
 
@@ -172,13 +215,13 @@ func copyFile(src, dst string) error {
 	return err
 }
 
-// downloadFile downloads a file from the given URL to the specified final path.
+// downloadFile downloads a file from the specified URL and saves it to the finalPath.
+// It uses a temporary file to ensure atomicity and cleans up on failure.
 func downloadFile(url string, finalPath string) error {
-	// Use a custom client with a 60-second timeout to prevent hangs
 	client := &http.Client{Timeout: 60 * time.Second}
 
-	// Download to a temporary file first
 	tmpPath := finalPath + ".tmp"
+
 	out, err := os.Create(tmpPath)
 	if err != nil {
 		return err
@@ -187,7 +230,7 @@ func downloadFile(url string, finalPath string) error {
 	resp, err := client.Get(url)
 	if err != nil {
 		out.Close()
-		os.Remove(tmpPath) // Clean up partial file
+		os.Remove(tmpPath)
 		return err
 	}
 	defer resp.Body.Close()
@@ -198,15 +241,19 @@ func downloadFile(url string, finalPath string) error {
 		return fmt.Errorf("bad status: %s", resp.Status)
 	}
 
-	_, err = io.Copy(out, resp.Body)
-	out.Close() // Must explicitly close before renaming
+	_, copyErr := io.Copy(out, resp.Body)
+	closeErr := out.Close()
 
-	if err != nil {
+	if copyErr != nil {
 		os.Remove(tmpPath)
-		return err
+		return copyErr
 	}
 
-	// Atomic rename guarantees the system only sees a 100% complete file
+	if closeErr != nil {
+		os.Remove(tmpPath)
+		return closeErr
+	}
+
 	return os.Rename(tmpPath, finalPath)
 }
 
@@ -218,26 +265,28 @@ func unzip(src string, dest string) error {
 	}
 	defer r.Close()
 
-	// Ensure our destination path is absolute and clean
 	destAbs, err := filepath.Abs(dest)
 	if err != nil {
 		return err
 	}
 
-	for _, f := range r.File {
-		fpath := filepath.Join(destAbs, f.Name)
+	destClean := filepath.Clean(destAbs) + string(os.PathSeparator)
 
-		// ZIP SLIP HARDENING: Ensure the extracted path stays strictly inside the target directory
-		if !strings.HasPrefix(fpath, filepath.Clean(destAbs)+string(os.PathSeparator)) {
-			return fmt.Errorf("Illegal file path in zip: %s", fpath)
+	for _, f := range r.File {
+		fpath := filepath.Clean(filepath.Join(destAbs, f.Name))
+
+		if !strings.HasPrefix(fpath, destClean) {
+			return fmt.Errorf("illegal file path in zip: %s", f.Name)
 		}
 
 		if f.FileInfo().IsDir() {
-			os.MkdirAll(fpath, os.ModePerm)
+			if err := os.MkdirAll(fpath, os.ModePerm); err != nil {
+				return err
+			}
 			continue
 		}
 
-		if err = os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+		if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
 			return err
 		}
 
@@ -252,20 +301,36 @@ func unzip(src string, dest string) error {
 			return err
 		}
 
-		_, err = io.Copy(outFile, rc)
-		outFile.Close()
-		rc.Close()
+		_, copyErr := io.Copy(outFile, rc)
+		closeOutErr := outFile.Close()
+		closeReadErr := rc.Close()
 
-		if err != nil {
-			return err
+		if copyErr != nil {
+			return copyErr
+		}
+
+		if closeOutErr != nil {
+			return closeOutErr
+		}
+
+		if closeReadErr != nil {
+			return closeReadErr
 		}
 	}
+
 	return nil
 }
 
 // =========================================================================
-// 4. Unified COM Task Registration (DRY Principle)
+// 4. Unified COM Task Registration
 // =========================================================================
+
+func putCOMProperty(dispatch *ole.IDispatch, name string, value interface{}) error {
+	if _, err := oleutil.PutProperty(dispatch, name, value); err != nil {
+		return fmt.Errorf("failed to set COM property %s: %w", name, err)
+	}
+	return nil
+}
 
 // registerTaskWithCOM registers a scheduled task using Windows COM API, handling both system and user modes.
 func registerTaskWithCOM(cfg *Config) error {
@@ -287,8 +352,7 @@ func registerTaskWithCOM(cfg *Config) error {
 	}
 	defer service.Release()
 
-	_, err = oleutil.CallMethod(service, "Connect")
-	if err != nil {
+	if _, err = oleutil.CallMethod(service, "Connect"); err != nil {
 		return err
 	}
 
@@ -299,6 +363,7 @@ func registerTaskWithCOM(cfg *Config) error {
 	rootFolder := rootFolderProg.ToIDispatch()
 	defer rootFolder.Release()
 
+	// Ignore "task not found" here; RegisterTaskDefinition below will create/update it.
 	oleutil.CallMethod(rootFolder, "DeleteTask", cfg.TaskName, 0)
 
 	newTaskSettingProg, err := oleutil.CallMethod(service, "NewTask", 0)
@@ -313,7 +378,10 @@ func registerTaskWithCOM(cfg *Config) error {
 		return err
 	}
 	regInfo := regInfoProg.ToIDispatch()
-	oleutil.PutProperty(regInfo, "Description", cfg.Description)
+	if err := putCOMProperty(regInfo, "Description", cfg.Description); err != nil {
+		regInfo.Release()
+		return err
+	}
 	regInfo.Release()
 
 	principalProg, err := oleutil.GetProperty(taskDefinition, "Principal")
@@ -322,13 +390,26 @@ func registerTaskWithCOM(cfg *Config) error {
 	}
 	principal := principalProg.ToIDispatch()
 
-	// Mode-specific Principal Routing
 	if cfg.IsSystem {
-		oleutil.PutProperty(principal, "GroupId", "Builtin\\Users")
-		oleutil.PutProperty(principal, "RunLevel", TaskRunLevelHighest)
+		if err := putCOMProperty(principal, "GroupId", "Builtin\\Users"); err != nil {
+			principal.Release()
+			return err
+		}
+
+		if err := putCOMProperty(principal, "RunLevel", TaskRunLevelHighest); err != nil {
+			principal.Release()
+			return err
+		}
 	} else {
-		oleutil.PutProperty(principal, "UserId", cfg.UserContext)
-		oleutil.PutProperty(principal, "LogonType", TaskLogonInteractive)
+		if err := putCOMProperty(principal, "UserId", cfg.UserContext); err != nil {
+			principal.Release()
+			return err
+		}
+
+		if err := putCOMProperty(principal, "LogonType", TaskLogonInteractive); err != nil {
+			principal.Release()
+			return err
+		}
 	}
 	principal.Release()
 
@@ -337,9 +418,19 @@ func registerTaskWithCOM(cfg *Config) error {
 		return err
 	}
 	settings := settingsProg.ToIDispatch()
-	oleutil.PutProperty(settings, "AllowStartIfOnBatteries", true)
-	oleutil.PutProperty(settings, "StopIfGoingOnBatteries", false)
-	oleutil.PutProperty(settings, "ExecutionTimeLimit", "PT0S")
+
+	if err := putCOMProperty(settings, "DisallowStartIfOnBatteries", false); err != nil {
+		settings.Release()
+		return err
+	}
+	if err := putCOMProperty(settings, "StopIfGoingOnBatteries", false); err != nil {
+		settings.Release()
+		return err
+	}
+	if err := putCOMProperty(settings, "ExecutionTimeLimit", "PT0S"); err != nil {
+		settings.Release()
+		return err
+	}
 	settings.Release()
 
 	triggersProg, err := oleutil.GetProperty(taskDefinition, "Triggers")
@@ -347,16 +438,22 @@ func registerTaskWithCOM(cfg *Config) error {
 		return err
 	}
 	triggers := triggersProg.ToIDispatch()
+
 	triggerProg, err := oleutil.CallMethod(triggers, "Create", TaskTriggerLogon)
 	if err != nil {
 		triggers.Release()
 		return err
 	}
 	trigger := triggerProg.ToIDispatch()
-	// Only bind to specific user if in user-mode
+
 	if !cfg.IsSystem {
-		oleutil.PutProperty(trigger, "UserId", cfg.UserContext)
+		if err := putCOMProperty(trigger, "UserId", cfg.UserContext); err != nil {
+			trigger.Release()
+			triggers.Release()
+			return err
+		}
 	}
+
 	trigger.Release()
 	triggers.Release()
 
@@ -365,28 +462,57 @@ func registerTaskWithCOM(cfg *Config) error {
 		return err
 	}
 	actions := actionsProg.ToIDispatch()
+
 	actionNewProg, err := oleutil.CallMethod(actions, "Create", TaskActionExec)
 	if err != nil {
 		actions.Release()
 		return err
 	}
 	action := actionNewProg.ToIDispatch()
-	oleutil.PutProperty(action, "Path", cfg.LauncherDest)
-	oleutil.PutProperty(action, "Arguments", cfg.LauncherArgs)
+
+	if err := putCOMProperty(action, "Path", cfg.LauncherDest); err != nil {
+		action.Release()
+		actions.Release()
+		return err
+	}
+
+	if err := putCOMProperty(action, "Arguments", cfg.LauncherArgs); err != nil {
+		action.Release()
+		actions.Release()
+		return err
+	}
+
 	action.Release()
 	actions.Release()
 
-	// Mode-specific Registration Routing
 	if cfg.IsSystem {
-		_, err = oleutil.CallMethod(rootFolder, "RegisterTaskDefinition", cfg.TaskName, taskDefinition, TaskCreateOrUpdate, nil, nil, TaskLogonNone)
+		_, err = oleutil.CallMethod(
+			rootFolder,
+			"RegisterTaskDefinition",
+			cfg.TaskName,
+			taskDefinition,
+			TaskCreateOrUpdate,
+			nil,
+			nil,
+			TaskLogonNone,
+		)
 	} else {
-		_, err = oleutil.CallMethod(rootFolder, "RegisterTaskDefinition", cfg.TaskName, taskDefinition, TaskCreateOrUpdate, cfg.UserContext, nil, TaskLogonInteractive)
+		_, err = oleutil.CallMethod(
+			rootFolder,
+			"RegisterTaskDefinition",
+			cfg.TaskName,
+			taskDefinition,
+			TaskCreateOrUpdate,
+			cfg.UserContext,
+			nil,
+			TaskLogonInteractive,
+		)
 	}
+
 	if err != nil {
 		return err
 	}
 
-	// Trigger execution immediately
 	taskProg, err := oleutil.CallMethod(rootFolder, "GetTask", cfg.TaskName)
 	if err == nil {
 		taskObj := taskProg.ToIDispatch()
@@ -403,7 +529,9 @@ func registerTaskWithCOM(cfg *Config) error {
 
 // checkWMIForProcess queries WMI to determine if AutoHotkey64.exe is running with the specified script path.
 func checkWMIForProcess(scriptPath string) bool {
-	ole.CoInitialize(0)
+	if err := ole.CoInitialize(0); err != nil {
+		return false
+	}
 	defer ole.CoUninitialize()
 
 	unknown, err := oleutil.CreateObject("WbemScripting.SWbemLocator")
@@ -570,11 +698,14 @@ func terminateSpecificAHKScript(scriptPath string) (int, error) {
 
 // main orchestrates the deployment process, handling configuration, environment setup, asset staging, COM registration, and verification.
 func main() {
+
+	// Configuration Check
 	cfg, err := buildConfig()
 	if err != nil {
 		log.Fatalf("Fatal: Failed to build configuration: %v", err)
 	}
 
+	// Privilege Check
 	if cfg.IsSystem && !isAdmin() {
 		log.Fatalf("Elevation Required: Please run this installer as an Administrator or use --mode=user.")
 	}
@@ -587,21 +718,27 @@ func main() {
 	}
 
 	// Setup dual-logging (Stdout + File)
-	logFile := setupFileLogging(cfg.TargetDir)
+	logFile := setupFileLogging(cfg.LogPath)
 	if logFile != nil {
 		defer logFile.Close()
 	}
 
 	log.Printf("Starting Deployment Manager (Mode: %s)", cfg.Mode)
 	log.Printf("Target Directory: %s", cfg.TargetDir)
+	log.Printf("Installer Log: %s", cfg.LogPath)
 
+	// -------------------------------------------------------------------------
+	// AutoHotkey Engine Deployment
+	// -------------------------------------------------------------------------
+
+	// Check if AutoHotkey64.exe exists; if not, download and extract it
 	if !fileExists(cfg.AHKExe) {
 		log.Println("AutoHotkey64.exe not found locally. Downloading from official source...")
 		if err := os.MkdirAll(cfg.AHKDir, 0755); err != nil {
 			log.Fatalf("Fatal: Could not create AutoHotkey directory: %v", err)
 		}
 
-		if err := downloadFile(ahkZipUrl, cfg.ZipPath); err != nil {
+		if err := downloadFile(ahkZipURL, cfg.ZipPath); err != nil {
 			log.Fatalf("Deployment Failed: Could not download AutoHotkey engine: %v", err)
 		}
 
@@ -609,7 +746,9 @@ func main() {
 		if err := unzip(cfg.ZipPath, cfg.AHKDir); err != nil {
 			log.Fatalf("Deployment Failed: Extraction error: %v", err)
 		}
-		os.Remove(cfg.ZipPath)
+		if err := os.Remove(cfg.ZipPath); err != nil {
+			log.Printf("Warning: Could not remove temporary zip file %s: %v", cfg.ZipPath, err)
+		}
 		log.Println("AutoHotkey engine successfully installed.")
 	} else {
 		log.Println("AutoHotkey engine is already installed locally.")
@@ -618,9 +757,12 @@ func main() {
 	// -------------------------------------------------------------------------
 	// Stage Assets
 	// -------------------------------------------------------------------------
+
+	// Define local paths for the AHK script and Launcher binary
 	localAHKScript := filepath.Join(cfg.ExeDir, "ErgonomicMouse.ahk")
 	localLauncher := filepath.Join(cfg.ExeDir, "Launcher.exe")
 
+	// Copy AHK Script
 	if fileExists(localAHKScript) {
 		log.Printf("Copying AHK script to %s...", cfg.TargetDir)
 		if err := copyFile(localAHKScript, cfg.ScriptDest); err != nil {
@@ -630,6 +772,7 @@ func main() {
 		log.Fatalf("Warning: Could not find 'ErgonomicMouse.ahk' in the installer folder. Aborting.")
 	}
 
+	// Copy Launcher binary
 	if fileExists(localLauncher) {
 		log.Printf("Copying unified auto-updater engine to %s...", cfg.TargetDir)
 		if err := copyFile(localLauncher, cfg.LauncherDest); err != nil {
@@ -639,7 +782,7 @@ func main() {
 		log.Fatalf("Warning: Could not find 'Launcher.exe' in the installer folder. Aborting.")
 	}
 
-	// Terminate specific stale sessions safely (Fixing the variable name here!)
+	// Terminate Stale AHK Processes
 	terminatedCount, err := terminateSpecificAHKScript(cfg.ScriptDest)
 	if err != nil {
 		log.Printf("Warning: Could not terminate stale AutoHotkey process: %v", err)
