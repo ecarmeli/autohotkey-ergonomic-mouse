@@ -19,6 +19,12 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+var (
+	version   = "dev"
+	buildTime = "unknown"
+	gitCommit = "none"
+)
+
 // =========================================================================
 // 1. Constants (Replacing Magic Numbers)
 // =========================================================================
@@ -713,16 +719,19 @@ func main() {
 	// -------------------------------------------------------------------------
 	// Environment Preparation
 	// -------------------------------------------------------------------------
+
+	// Ensure target directory exists
 	if err := os.MkdirAll(cfg.TargetDir, 0755); err != nil {
 		log.Fatalf("Fatal: Could not create target directory: %v", err)
 	}
 
-	// Setup dual-logging (Stdout + File)
+	// Logging Setup
 	logFile := setupFileLogging(cfg.LogPath)
 	if logFile != nil {
 		defer logFile.Close()
 	}
 
+	log.Printf("Deployment Manager Version: %s | Build: %s | Commit: %s", version, buildTime, gitCommit)
 	log.Printf("Starting Deployment Manager (Mode: %s)", cfg.Mode)
 	log.Printf("Target Directory: %s", cfg.TargetDir)
 	log.Printf("Installer Log: %s", cfg.LogPath)
@@ -808,12 +817,18 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	if verifyAHKRunning(ctx, cfg.ScriptDest) {
+	verifyOK := verifyAHKRunning(ctx, cfg.ScriptDest)
+
+	if verifyOK {
 		log.Printf("Verification Success: 'AutoHotkey64.exe' is running your script.")
 	} else {
 		log.Printf("Warning: Verification Timeout: Task was triggered, but AutoHotkey did not initialize within 15 seconds.")
 	}
 
-	log.Println("Deployment Completed successfully.")
+	if verifyOK {
+		log.Println("Deployment completed successfully.")
+	} else {
+		log.Println("Deployment completed with warnings.")
+	}
 	time.Sleep(2 * time.Second) // Brief pause so manual runners can read the final terminal output
 }
