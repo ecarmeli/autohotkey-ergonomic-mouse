@@ -2,44 +2,102 @@ name: Code Quality and Security Analysis
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]                  # Run on every push to main branch
   pull_request:
-    branches:
-      - main
+    branches: [ main ]                  # Run on every PR targeting main
 
 jobs:
-  # --- POWERSHELL QUALITY GATE ---
-  powershell_analysis:
-    name: PowerShell Script Analyzer
-    runs-on: windows-latest
+
+  # ---------------------------------------------
+  # GO BUILD + LINT + FORMAT VALIDATION
+  # ---------------------------------------------
+  go_quality:
+    name: Go Build & Lint
+    runs-on: ubuntu-latest              # Use Linux runner (fast + standard for Go CI)
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7       # Pull your repository into the runner
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'          # Specify Go version
+          cache: true                   # Enable module caching (speeds up builds)
+
+      - name: Verify Build
+        run: go build ./...             # Ensure all packages compile successfully
+
+      - name: Run go vet
+        run: go vet ./...               # Static analysis for common coding mistakes
+
+      - name: Check formatting
+        run: |
+          # Fail if any file is not properly formatted with gofmt
+          if [ -n "$(gofmt -l .)" ]; then
+            echo "Code is not formatted. Run gofmt."
+            gofmt -l .               # Print offending files
+            exit 1                  # Fail the pipeline
+          fi
+
+      - name: Run staticcheck
+        run: |
+          # Install advanced static analysis tool
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          staticcheck ./...         # Run deeper linting checks
+
+      - name: Cross-compile for Windows
+        run: |
+          # Ensure the code builds for Windows (your target platform)
+          GOOS=windows GOARCH=amd64 go build
+
+
+  # ---------------------------------------------
+  # GO DEPENDENCY VULNERABILITY SCAN
+  # ---------------------------------------------
+  go_security:
+    name: Go Dependency Scan
+    needs: go_quality                   # Only run if go_quality succeeded (fail-fast pipeline)
+    runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
 
-      - name: Run PSScriptAnalyzer
-        uses: microsoft/psscriptanalyzer-action@v1.1
+      - name: Setup Go
+        uses: actions/setup-go@v6
         with:
-          path: .\
-          recurse: true
-          severity: '"Error", "Warning"'
+          go-version: '1.26.4'
 
-  # --- UNIVERSAL SECURITY GATE (TRIVY CATCHALL) ---
+      - name: Run govulncheck
+        run: |
+          # Install official Go vulnerability scanner
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...         # Scan for known vulnerabilities in dependencies
+
+
+  # ---------------------------------------------
+  # REPOSITORY-LEVEL SECURITY SCAN (TRIVY)
+  # ---------------------------------------------
   repository_security_scan:
     name: Workspace Vulnerability & Secret Scan
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v7
 
       - name: Run Trivy Vulnerability Scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0   # Pinned version for stability
         with:
-          scan-type: 'fs'           # Scan the local file system
-          scan-ref: '.'             # Start scanning from the root
-          hide-progress: false
-          format: 'table'           # Display clean diagnostic grids in the runner console
-          exit-code: '1'            # Hard-fail the pipeline if issues are found
-          ignore-unfixed: true      # Bypass CVEs that do not have a vendor patch yet
-          severity: 'CRITICAL,HIGH'
-          scanners: 'vuln,secret,config' # CATCHALL: Packages (vuln), Leaked Data (secret), & Action Files (config)
+          scan-type: 'fs'                         # Scan filesystem (entire repo)
+          scan-ref: '.'                           # Start from repo root
+          hide-progress: false                    # Show scan progress in logs
+          format: 'table'                         # Human-readable output
+          exit-code: '1'                          # Fail pipeline on findings
+          ignore-unfixed: true                    # Ignore vulns without patches
+          severity: 'CRITICAL,HIGH'               # Only fail on high-impact issues
+          scanners: 'vuln,secret,config'          # Scan for:
+                                                  # - vulnerabilities (dependencies)
+                                                  # - secrets (API keys, creds)
+                                                  # - config issues (misconfigurations)
