@@ -28,10 +28,10 @@ jobs:
       
       - name: Verify Build (exclude /bin dir)
         run: |
-          go list ./... | grep -v '^.*/bin$' | xargs go build                # Ensure the code compiles successfully (excluding /bin)  
+          go list ./... | grep -vE '^(\.|.*/bin)$' | xargs go build          # Ensure the code compiles successfully (excluding /bin)  
 
       - name: Run go vet
-        run: go list ./... | grep -v '^.*/bin$' | xargs go vet               # Static analysis for common coding mistakes
+        run: go list ./... | grep -vE '^(\.|.*/bin)$' | xargs go vet         # Static analysis for common coding mistakes
 
       - name: Check formatting
         run: |
@@ -46,7 +46,7 @@ jobs:
         run: |
           # Install advanced static analysis tool
           go install honnef.co/go/tools/cmd/staticcheck@latest
-          go list ./... | grep -v '^.*/bin$' | xargs staticcheck         # Run deeper linting checks
+          go list ./... | grep -vE '^(\.|.*/bin)$' | xargs staticcheck        # Run deeper linting checks
 
       - name: Cross-compile for Windows
         run: |
