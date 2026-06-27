@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -12,23 +14,77 @@ import (
 	"time"
 )
 
-// =========================================================================
-// 1. Declarations (Constants)
-// =========================================================================
-
-const remoteUrl = "https://raw.githubusercontent.com/ecarmeli/autohotkey-ergonomic-mouse/main/bin/ErgonomicMouse.ahk"
-
-// =========================================================================
-// 2. Variables (Global State)
-// =========================================================================
-
 var (
-	targetDir           string
-	ahkScriptTargetPath string
-	etagFile            string
-	ahkExecutable       string
-	logFile             string
+	version   = "dev"
+	buildTime = "unknown"
+	gitCommit = "none"
 )
+
+// =========================================================================
+// 1. Constants
+// =========================================================================
+
+const remoteURL = "https://raw.githubusercontent.com/ecarmeli/autohotkey-ergonomic-mouse/main/bin/ErgonomicMouse.ahk"
+
+// =========================================================================
+// 2. Configuration Struct
+// =========================================================================
+
+type Config struct {
+	Mode          string
+	TargetDir     string
+	AHKScriptPath string
+	ETagFile      string
+	AHKExe        string
+	LogFile       string
+}
+
+func requiredEnv(name string) (string, error) {
+	v := os.Getenv(name)
+	if v == "" {
+		return "", fmt.Errorf("required environment variable %s is not set", name)
+	}
+	return v, nil
+}
+
+func buildConfig() (*Config, error) {
+	mode := flag.String("mode", "system", "Execution mode: 'system' or 'user'")
+	flag.Parse()
+
+	if *mode != "system" && *mode != "user" {
+		return nil, fmt.Errorf("invalid mode %q: expected 'system' or 'user'", *mode)
+	}
+
+	cfg := &Config{Mode: *mode}
+
+	if cfg.Mode == "user" {
+		localAppData, err := requiredEnv("LOCALAPPDATA")
+		if err != nil {
+			return nil, err
+		}
+
+		cfg.TargetDir = filepath.Join(localAppData, "ErgonomicMouse")
+		cfg.AHKExe = filepath.Join(cfg.TargetDir, "AutoHotkey", "AutoHotkey64.exe")
+	} else {
+		progData, err := requiredEnv("PROGRAMDATA")
+		if err != nil {
+			return nil, err
+		}
+		progFiles, err := requiredEnv("ProgramFiles")
+		if err != nil {
+			return nil, err
+		}
+
+		cfg.TargetDir = filepath.Join(progData, "ErgonomicMouse")
+		cfg.AHKExe = filepath.Join(progFiles, "AutoHotkey", "v2", "AutoHotkey64.exe")
+	}
+
+	cfg.AHKScriptPath = filepath.Join(cfg.TargetDir, "ErgonomicMouse.ahk")
+	cfg.ETagFile = cfg.AHKScriptPath + ".etag"
+	cfg.LogFile = filepath.Join(cfg.TargetDir, "logs", "launcher.log")
+
+	return cfg, nil
+}
 
 // =========================================================================
 // 3. Helper Functions
@@ -36,41 +92,54 @@ var (
 
 func fileExists(filename string) bool {
 	info, err := os.Stat(filename)
-	if os.IsNotExist(err) {
-		return false
+	if err != nil {
+		return false // Safely handle permission denials or missing files without panicking
 	}
 	return !info.IsDir()
 }
 
-func logEvent(logPath string, message string) {
+func rotateLogs(logFile string) {
+	info, err := os.Stat(logFile)
+	if err == nil && info.Size() > 1024*1024 {
+		oldLog := logFile + ".old"
+		_ = os.Rename(logFile, oldLog)
+	}
+
+	oldInfo, err := os.Stat(logFile + ".old")
+	if err == nil && time.Since(oldInfo.ModTime()).Hours() > 24*90 {
+		_ = os.Remove(logFile + ".old")
+	}
+}
+
+func launchAHK(cfg *Config) {
+	executable := cfg.AHKExe
+	scriptPath := cfg.AHKScriptPath
+
+	if fileExists(executable) && fileExists(scriptPath) {
+		cmd := exec.Command(executable, scriptPath)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Start(); err != nil {
+			logToFile(cfg.LogFile, "ERROR: Failed to launch AutoHotkey: %v", err)
+		} else {
+			logToFile(cfg.LogFile, "SUCCESS: AutoHotkey launched successfully.")
+		}
+	} else {
+		logToFile(cfg.LogFile, "ERROR: Cannot launch. Executable or script missing.")
+	}
+}
+
+func logToFile(logPath string, format string, args ...any) {
 	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return
 	}
 	defer f.Close()
-	timestamp := time.Now().Format("2006-01-02 15:04:05")
-	f.WriteString(fmt.Sprintf("%s - %s\n", timestamp, message))
-}
 
-func rotateLogs(logFile string) {
-	info, err := os.Stat(logFile)
-	if err == nil && info.Size() > 1024*1024 { // If > 1MB
-		oldLog := logFile + ".old"
-		os.Rename(logFile, oldLog)
-	}
-
-	oldInfo, err := os.Stat(logFile + ".old")
-	if err == nil && time.Since(oldInfo.ModTime()).Hours() > 24*90 { // If > 90 days
-		os.Remove(logFile + ".old")
-	}
-}
-
-func launchAHK(executable string, scriptPath string) {
-	if fileExists(executable) && fileExists(scriptPath) {
-		// Use .Start() instead of .Run() so the Go program doesn't wait for AHK to close
-		cmd := exec.Command(executable, scriptPath)
-		cmd.Start()
-	}
+	ts := time.Now().Format("2006-01-02 15:04:05")
+	msg := fmt.Sprintf(format, args...)
+	f.WriteString(fmt.Sprintf("%s - %s\n", ts, msg))
 }
 
 // =========================================================================
@@ -78,114 +147,151 @@ func launchAHK(executable string, scriptPath string) {
 // =========================================================================
 
 func main() {
-	// -------------------------------------------------------------------------
-	// CLI Flag Parsing & Path Configuration
-	// -------------------------------------------------------------------------
-
-	// Define the --mode flag (defaults to "system" if not provided)
-	mode := flag.String("mode", "system", "Execution mode: 'system' or 'user'")
-	flag.Parse()
-
-	// Route configuration paths based on the flag
-	if *mode == "user" {
-		targetDir = filepath.Join(os.Getenv("LOCALAPPDATA"), "ErgonomicMouse")
-		ahkExecutable = filepath.Join(targetDir, "AutoHotkey", "AutoHotkey64.exe")
-	} else {
-		targetDir = filepath.Join(os.Getenv("PROGRAMDATA"), "ErgonomicMouse")
-		ahkExecutable = filepath.Join(os.Getenv("ProgramFiles"), "AutoHotkey", "v2", "AutoHotkey64.exe")
+	cfg, err := buildConfig()
+	if err != nil {
+		log.Fatalf("Fatal: Failed to build configuration: %v", err)
 	}
 
-	// Construct shared paths downstream
-	ahkScriptTargetPath = filepath.Join(targetDir, "ErgonomicMouse.ahk")
-	etagFile = ahkScriptTargetPath + ".etag"
-	logFile = filepath.Join(targetDir, "update.log")
+	if err := os.MkdirAll(cfg.TargetDir, 0755); err != nil {
+		log.Fatalf("Fatal: Could not create target directory: %v", err)
+	}
 
-	// -------------------------------------------------------------------------
-	// Prepare the Ground
-	// -------------------------------------------------------------------------
+	// Create the logs subdirectory safely
+	if err := os.MkdirAll(filepath.Dir(cfg.LogFile), 0755); err != nil {
+		log.Fatalf("Fatal: Could not create logs directory: %v", err)
+	}
 
-	// Ensure target directory exists
-	os.MkdirAll(targetDir, 0755)
+	rotateLogs(cfg.LogFile)
 
-	// Handle Log Rotation
-	rotateLogs(logFile)
+	logToFile(cfg.LogFile, "--- Launcher Started (Mode: %s) ---", cfg.Mode)
+	logToFile(cfg.LogFile, "Launcher Version: %s | Build: %s | Commit: %s", version, buildTime, gitCommit)
 
-	// -------------------------------------------------------------------------
-	// Conditional HTTP Request (ETag Logic)
-	// -------------------------------------------------------------------------
-
-	client := &http.Client{Timeout: 8 * time.Second}
-	req, err := http.NewRequest("GET", remoteUrl, nil)
-	if err != nil {
-		logEvent(logFile, fmt.Sprintf("WARNING: Failed to build request: %v", err))
-		launchAHK(ahkExecutable, ahkScriptTargetPath)
+	if !fileExists(cfg.AHKExe) {
+		logToFile(cfg.LogFile, "ERROR: AutoHotkey executable not found at: %s. Aborting.", cfg.AHKExe)
 		return
 	}
 
-	// If both the local script and ETag file exist, read the ETag and set the header
-	if fileExists(ahkScriptTargetPath) && fileExists(etagFile) {
-		localETag, err := os.ReadFile(etagFile)
+	// -------------------------------------------------------------------------
+	// Context-Aware HTTP Request (ETag Logic)
+	// -------------------------------------------------------------------------
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", remoteURL, nil)
+	if err != nil {
+		logToFile(cfg.LogFile, "WARNING: Failed to build request: %v", err)
+		launchAHK(cfg)
+		return
+	}
+
+	if fileExists(cfg.AHKScriptPath) && fileExists(cfg.ETagFile) {
+		localETag, err := os.ReadFile(cfg.ETagFile)
 		if err == nil && len(strings.TrimSpace(string(localETag))) > 0 {
 			req.Header.Set("If-None-Match", strings.TrimSpace(string(localETag)))
 		}
 	}
 
-	// Execute the Request
-	resp, err := client.Do(req)
-	if err != nil {
-		logEvent(logFile, fmt.Sprintf("WARNING: Silent update network failure: %v", err))
-		launchAHK(ahkExecutable, ahkScriptTargetPath)
+	// Enforce hard timeout to prevent socket hangs
+	client := &http.Client{Timeout: 15 * time.Second}
+
+	var resp *http.Response
+	var doErr error
+
+	// Quick retry logic for minor network blips
+	for i := 0; i < 2; i++ {
+		resp, doErr = client.Do(req)
+		if doErr == nil {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	if doErr != nil {
+		logToFile(cfg.LogFile, "WARNING: Silent update network failure after retries: %v", doErr)
+		launchAHK(cfg)
 		return
 	}
 	defer resp.Body.Close()
 
 	// -------------------------------------------------------------------------
-	// Handle the Response
+	// Handle the Response Safely
 	// -------------------------------------------------------------------------
-
 	if resp.StatusCode == http.StatusNotModified { // 304 - No changes
-		logEvent(logFile, "INFO: Script up to date.")
-		launchAHK(ahkExecutable, ahkScriptTargetPath)
+		logToFile(cfg.LogFile, "INFO: Script up to date (304).")
+		launchAHK(cfg)
 		return
 	}
 
 	if resp.StatusCode == http.StatusOK { // 200 - New file found
-		bodyBytes, err := io.ReadAll(resp.Body)
+		// Lightweight integrity check
+		contentType := resp.Header.Get("Content-Type")
+		if !strings.Contains(contentType, "text") && !strings.Contains(contentType, "plain") {
+			logToFile(cfg.LogFile, "WARNING: Unexpected content-type: %s. Aborting update.", contentType)
+			launchAHK(cfg)
+			return
+		}
+
+		// Security: Prevent memory exhaustion by capping download at 5MB
+		const maxScriptSize = 5 * 1024 * 1024
+		bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxScriptSize))
 		if err != nil {
-			logEvent(logFile, "WARNING: Failed to read downloaded content.")
-			launchAHK(ahkExecutable, ahkScriptTargetPath)
+			logToFile(cfg.LogFile, "WARNING: Failed to read downloaded content: %v", err)
+			launchAHK(cfg)
 			return
 		}
 
 		bodyString := string(bodyBytes)
 
-		// Validation: Check size and presence of the required directive
-		if len(bodyString) < 100 || !strings.Contains(strings.ToLower(bodyString), "#requires autohotkey") {
-			logEvent(logFile, "WARNING: Downloaded file failed validation checks. Aborting update.")
-			launchAHK(ahkExecutable, ahkScriptTargetPath)
+		// Hardened Script Validation
+		if len(bodyBytes) < 100 ||
+			!strings.Contains(strings.ToLower(bodyString), "#requires autohotkey") ||
+			!strings.Contains(bodyString, "::") {
+			logToFile(cfg.LogFile, "WARNING: Downloaded file failed rigorous validation checks. Aborting update.")
+			launchAHK(cfg)
 			return
 		}
 
-		// Atomic File Replacement (Write to .tmp first, then rename)
-		tmpScriptPath := ahkScriptTargetPath + ".tmp"
-		os.WriteFile(tmpScriptPath, bodyBytes, 0644)
-		os.Rename(tmpScriptPath, ahkScriptTargetPath) // Overwrites existing file
-
-		// Save the new ETag
-		remoteETag := resp.Header.Get("ETag")
-		if remoteETag != "" {
-			tmpEtagPath := etagFile + ".tmp"
-			os.WriteFile(tmpEtagPath, []byte(remoteETag), 0644)
-			os.Rename(tmpEtagPath, etagFile)
+		// Hardened Atomic File Replacement
+		tmpScriptPath := cfg.AHKScriptPath + ".tmp"
+		if err := os.WriteFile(tmpScriptPath, bodyBytes, 0644); err != nil {
+			logToFile(cfg.LogFile, "WARNING: Failed to write temp script file: %v", err)
+			launchAHK(cfg)
+			return
 		}
 
-		logEvent(logFile, fmt.Sprintf("SUCCESS: Local script updated. ETag: %s", remoteETag))
+		if err := os.Rename(tmpScriptPath, cfg.AHKScriptPath); err != nil {
+			logToFile(cfg.LogFile, "WARNING: Failed to atomically replace script file: %v", err)
+			os.Remove(tmpScriptPath) // Clean up orphan temp file
+			launchAHK(cfg)
+			return
+		}
+
+		remoteETag := resp.Header.Get("ETag")
+		if remoteETag != "" {
+			tmpEtagPath := cfg.ETagFile + ".tmp"
+			if err := os.WriteFile(tmpEtagPath, []byte(remoteETag), 0644); err != nil {
+				logToFile(cfg.LogFile, "WARNING: Failed to write temp ETag file: %v", err)
+			} else {
+				if err := os.Rename(tmpEtagPath, cfg.ETagFile); err != nil {
+					logToFile(cfg.LogFile, "WARNING: Failed to atomically save ETag file: %v", err)
+				}
+			}
+		} else {
+			logToFile(cfg.LogFile, "INFO: No ETag returned by the remote server.")
+		}
+
+		logToFile(cfg.LogFile, "SUCCESS: Local script updated. ETag: %s", remoteETag)
 	} else {
-		logEvent(logFile, fmt.Sprintf("WARNING: Unexpected HTTP status: %d", resp.StatusCode))
+		logToFile(cfg.LogFile, "WARNING: Unexpected HTTP status: %d", resp.StatusCode)
 	}
 
 	// -------------------------------------------------------------------------
-	// Launch AutoHotkey
+	// Launch Engine
 	// -------------------------------------------------------------------------
-	launchAHK(ahkExecutable, ahkScriptTargetPath)
+
+	// Final launch of the AutoHotkey script
+	launchAHK(cfg)
+
+	logToFile(cfg.LogFile, "Launcher execution completed.")
+
 }
