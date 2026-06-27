@@ -110,18 +110,13 @@ func buildConfig() (*Config, error) {
 // isAdmin checks if the current process has administrative privileges
 func isAdmin() bool {
 	var token windows.Token
-
-	err := windows.OpenProcessToken(
-		windows.CurrentProcess(),
-		windows.TOKEN_QUERY,
-		&token,
-	)
+	err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_QUERY, &token)
 	if err != nil {
 		return false
 	}
 	defer token.Close()
 
-	var elevation windows.TokenElevation
+	var elevation uint32
 	var outLen uint32
 
 	err = windows.GetTokenInformation(
@@ -135,7 +130,7 @@ func isAdmin() bool {
 		return false
 	}
 
-	return elevation.TokenIsElevated != 0
+	return elevation != 0
 }
 
 // fileExists checks if a given file exists and is not a directory
@@ -452,11 +447,9 @@ func checkWMIForProcess(scriptPath string) bool {
 	ienum := (*ole.IEnumVARIANT)(ienumUnknown)
 	defer ienum.Release()
 
-	var variant ole.VARIANT
-	var fetched uint32
-
 	for {
-		err := ienum.Next(1, &variant, &fetched)
+		// ienum.Next takes 1 argument and returns 3 values
+		variant, fetched, err := ienum.Next(1)
 		if err != nil || fetched == 0 {
 			break
 		}
@@ -466,10 +459,12 @@ func checkWMIForProcess(scriptPath string) bool {
 		if err == nil {
 			if strings.Contains(cmdLineProg.ToString(), scriptPath) {
 				process.Release()
+				variant.Clear()
 				return true
 			}
 		}
 		process.Release()
+		variant.Clear()
 	}
 	return false
 }
@@ -493,71 +488,80 @@ func verifyAHKRunning(ctx context.Context, scriptPath string) bool {
 }
 
 // terminateSpecificAHKScript uses WMI to surgically kill only the AHK process running our script
-func terminateSpecificAHScript(scriptPath string) {
-	ole.CoInitialize(0)
+func terminateSpecificAHKScript(scriptPath string) (int, error) {
+	if err := ole.CoInitialize(0); err != nil {
+		return 0, err
+	}
 	defer ole.CoUninitialize()
 
 	unknown, err := oleutil.CreateObject("WbemScripting.SWbemLocator")
 	if err != nil {
-		return
+		return 0, err
 	}
 	defer unknown.Release()
 
 	wmiUnknown, err := unknown.QueryInterface(ole.IID_IDispatch)
 	if err != nil {
-		return
+		return 0, err
 	}
 	defer wmiUnknown.Release()
 
 	serviceProg, err := oleutil.CallMethod(wmiUnknown, "ConnectServer", nil, "ROOT\\CIMV2")
 	if err != nil {
-		return
+		return 0, err
 	}
+
 	service := serviceProg.ToIDispatch()
 	defer service.Release()
 
 	query := "SELECT * FROM Win32_Process WHERE Name = 'AutoHotkey64.exe'"
+
 	resultProg, err := oleutil.CallMethod(service, "ExecQuery", query)
 	if err != nil {
-		return
+		return 0, err
 	}
+
 	results := resultProg.ToIDispatch()
 	defer results.Release()
 
 	enum, err := results.GetProperty("_NewEnum")
 	if err != nil {
-		return
+		return 0, err
 	}
 	defer enum.Clear()
 
 	ienumUnknown, err := enum.ToIUnknown().QueryInterface(ole.IID_IEnumVariant)
 	if err != nil {
-		return
+		return 0, err
 	}
 
 	ienum := (*ole.IEnumVARIANT)(ienumUnknown)
 	defer ienum.Release()
 
-	var variant ole.VARIANT
-	var fetched uint32
+	terminatedCount := 0
 
 	for {
-		err := ienum.Next(1, &variant, &fetched)
+		variant, fetched, err := ienum.Next(1)
 		if err != nil || fetched == 0 {
 			break
 		}
 
 		process := variant.ToIDispatch()
+
 		cmdLineProg, err := oleutil.GetProperty(process, "CommandLine")
 		if err == nil {
-			// If this specific AutoHotkey process is running OUR script
 			if strings.Contains(cmdLineProg.ToString(), scriptPath) {
-				// Terminate this exact process cleanly via WMI
-				oleutil.CallMethod(process, "Terminate")
+				if _, err := oleutil.CallMethod(process, "Terminate"); err == nil {
+					terminatedCount++
+				}
 			}
 		}
+
 		process.Release()
+		variant.Clear()
 	}
+
+	return terminatedCount, nil
 }
 
 // =========================================================================
@@ -636,7 +640,12 @@ func main() {
 	}
 
 	// Terminate specific stale sessions safely (Fixing the variable name here!)
-	terminateSpecificAHScript(cfg.ScriptDest)
+	terminatedCount, err := terminateSpecificAHKScript(cfg.ScriptDest)
+	if err != nil {
+		log.Printf("Warning: Could not terminate stale AutoHotkey process: %v", err)
+	} else if terminatedCount > 0 {
+		log.Printf("Terminated %d stale AutoHotkey process(es).", terminatedCount)
+	}
 
 	// -------------------------------------------------------------------------
 	// Unified Registration
