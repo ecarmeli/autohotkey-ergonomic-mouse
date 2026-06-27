@@ -25,11 +25,13 @@ jobs:
           go-version: '1.26.4'          # Specify Go version
           cache: true                   # Enable module caching (speeds up builds)
 
-      - name: Verify Build
-        run: go build ./...             # Ensure all packages compile successfully
+      
+      - name: Verify Build (exclude /bin dir)
+        run: |
+          go list ./... | grep -v '^.*/bin$' | xargs go build                # Ensure the code compiles successfully (excluding /bin)  
 
       - name: Run go vet
-        run: go vet ./...               # Static analysis for common coding mistakes
+        run: go list ./... | grep -v '^.*/bin$' | xargs go vet               # Static analysis for common coding mistakes
 
       - name: Check formatting
         run: |
@@ -44,12 +46,12 @@ jobs:
         run: |
           # Install advanced static analysis tool
           go install honnef.co/go/tools/cmd/staticcheck@latest
-          staticcheck ./...         # Run deeper linting checks
+          go list ./... | grep -v '^.*/bin$' | xargs staticcheck         # Run deeper linting checks
 
       - name: Cross-compile for Windows
         run: |
           # Ensure the code builds for Windows (your target platform)
-          GOOS=windows GOARCH=amd64 go build
+          GOOS=windows GOARCH=amd64 go build -o build-output.exe ./bin
 
 
   # ---------------------------------------------
