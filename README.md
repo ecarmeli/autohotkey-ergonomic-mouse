@@ -10,7 +10,7 @@ This project features a unified, state-aware deployment manager (`InstallErgonom
 
 ## 🩺 Why This Project Exists: Vision & Objectives
 
-> **The Problem:** Traditional navigation forces your mouse hand to handle positioning, scrolling, and thousands of repetitive clicks daily, causing chronic finger and wrist strain.<br>
+> **The Problem:** Traditional navigation forces your mouse hand to handle positioning, scrolling, and thousands of repetitive clicks daily, causing chronic finger and wrist strain.  
 > **The Solution:** By separating cursor movement from clicking, this project creates a balanced, two-handed layout built for long-term joint health and a pain-free workflow.
 
 This project was born out of a vital need for workspace ergonomics and physical strain relief. In a traditional computing setup, the primary mouse hand bears the brunt of continuous, repetitive stress from constant finger clicking — a leading cause of hand fatigue and repetitive strain injuries (RSI).
@@ -20,21 +20,26 @@ This solution rebalances that physical workload by shifting primary mouse click 
 
 ## 🛠️ Installation & Management
 
-This project features a unified, state-aware deployment manager (`InstallErgonomicMouse.bat`) that handles both installation and clean uninstallation from a single interactive menu.
-
 1. Download or clone this repository to your local machine.
 2. Double-click `InstallErgonomicMouse.bat` to launch the deployment menu.
 3. Select your preferred deployment environment:
-   * **System Mode (Requires Admin):** Installs globally. Recommended if you need the script to interact seamlessly with other software running as administrator (e.g., Task Manager, elevated terminals). *Note: User Mode is recommended in a Windows Remote Desktop Services (RDS) environment.*
-   * **User Mode (Standard Privilege):** Installs per-user into `$ENV:LOCALAPPDATA`. Recommended for strictly managed corporate machines where local administrative permissions are blocked.
+   * **System Mode (Requires Admin):**
+     * Installs globally
+     * Required for interaction with elevated apps
+   * **User Mode (Standard Privilege):**
+     * Installs under `LOCALAPPDATA`
+     * Recommended for restricted/corporate environments
 
-**Smart Guardrails:** The deployment manager enforces strict mutual exclusivity. If one mode is installed, it will lock the other mode to prevent system conflicts. It also features privilege-context awareness, intentionally blocking User-Mode management if the terminal is accidentally elevated, ensuring your scheduled task permissions are never corrupted.
+**Smart Guardrails:**
+- Enforces mutual exclusivity between modes  
+- Prevents privilege mismatches  
+- Ensures scheduled tasks are created with correct permissions  
 
 
 ## 📝 Prerequisites
 
-* **PowerShell 5.1+** (Native on Windows 10 and Windows 11).
-* **AutoHotkey v2** (The installation scripts will automatically download and provision the portable engine if it is not found).
+- **Windows 10 / 11**
+- **AutoHotkey v2** *(automatically downloaded and provisioned if not present)*
 
 
 ## 🚀 Key Features & Ergonomic Design
@@ -54,20 +59,54 @@ autohotkey-ergonomic-mouse/
 │
 ├── .github/
 │   ├── workflows/
-│   │   └── security-and-quality.yml            # CI/CD pipeline (PSScriptAnalyzer & Trivy catchall)
-│   └── dependabot.yml                          # Automated weekly updates for GitHub Actions
+│   │   └── security-and-quality.yml   # CI: build, lint, security scanning
+│   └── dependabot.yml                 # Automated dependency updates
 │
-├── bin/                                        # Payload directory
-│   ├── ErgonomicMouse.ahk                      # Unified AutoHotkey mapping logic (System & User)
-│   ├── LaunchAndUpdate.ps1                     # System-Mode smart-updater & engine
-│   ├── LaunchAndUpdate-User.ps1                # User-Mode smart-updater & engine
-│   ├── registerErgonomicMouseSchdTask.ps1      # System-Mode task registration
-│   └── registerErgonomicMouseSchdTask-User.ps1 # User-Mode task registration
+├── bin/
+│   └── ErgonomicMouse.ahk             # AutoHotkey mapping logic
 │
-├── InstallErgonomicMouse.bat                   # Unified interactive deployment & cleanup manager
-├── .gitignore                                  # Specifies untracked files (ignores .tmp files and logs)
-└── README.md                                   # Project documentation
+├── cmd/
+│   ├── launcher/
+│   │   └── main.go                    # Launcher executable (entry point)
+│   └── deploymanager/ 
+│       └── main.go                    # Deployment manager engine
+│ 
+├── InstallErgonomicMouse.bat          # Interactive installer
+├── go.mod                             # Go module definition
+├── go.sum                             # Dependency lock file
+├── .gitignore
+└── README.md
 ```
+
+## ⚙️ Build & Development
+
+### Build all Go components
+
+`go build ./...`
+
+### Build Windows binaries
+
+
+`GOOS=windows GOARCH=amd64 go build -o bin/Launcher.exe ./cmd/launcher`  
+`GOOS=windows GOARCH=amd64 go build -o bin/DeployManager.exe ./cmd/deploymanager`
+
+***
+
+## ✅ CI/CD Pipeline
+
+GitHub Actions workflow:
+
+`.github/workflows/security-and-quality.yml`
+
+### Includes:
+
+* ✅ `go build ./...` — compilation validation
+* ✅ `go vet` — static analysis
+* ✅ `staticcheck` — advanced linting
+* ✅ `govulncheck` — dependency vulnerability scanning
+* ✅ `trivy` — repository-level vulnerability, secret, and configuration scanning
+* ✅ Windows cross-compilation
+
 ## 🎮 Keymaps & Controls
 
 | Input | Action | Behavior |
@@ -80,13 +119,12 @@ autohotkey-ergonomic-mouse/
 | **`Shift + WheelDown`** | Horizontal Scroll Right| High-precision messaging bypasses OS inertia limits. |
 | **`Ctrl + F12`** | Panic Release | Instantly forces a release of all virtual mouse buttons if stuck. |
 
+## 🔄 Update Model (High-Level)
 
-## ⚙️ How the Auto-Update System Works
-
-Instead of running `ErgonomicMouse.ahk` directly, the registered Windows Scheduled Task points to the corresponding launcher engine (`LaunchAndUpdate.ps1` or `LaunchAndUpdate-User.ps1`).
-
-1. **ETag Conditional Requests:** At logon, PowerShell opens a silent connection to GitHub. It uses native HTTP `If-None-Match` headers to compare the local file's ETag with the remote server. If the file hasn't changed, GitHub returns a `304 Not Modified`, saving bandwidth and bypassing disk I/O entirely.
-2. **Payload Verification:** If an update is required, the file is downloaded into memory and scanned for specific validation strings (e.g., `#Requires AutoHotkey`) to ensure it is a complete, healthy script.
-3. **Atomic File Swaps:** To prevent file corruption from sudden network drops, the new script is written to a temporary `.tmp` file, then atomically moved to overwrite the live script.
-4. **Log Rotation:** A self-cleaning log tracks update statuses, automatically archiving logs over 1MB and purging archives older than 90 days.
-5. **Offline Resiliency:** If you are offline, the web request fails silently within 8 seconds and immediately launches the locally cached script, ensuring your peripheral setup never stops working.
+* Launcher binary is responsible for execution flow
+* AutoHotkey script acts as runtime payload
+* Updates are fetched and validated before execution
+* Designed for:
+  * resilience
+  * silent operation
+  * zero user friction
