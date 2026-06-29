@@ -3,16 +3,21 @@ name: Build and Package Installer
 on:
   push:
     branches: [ "main" ]
+    tags: [ "v*.*.*" ] # Triggers the pipeline when a version tag is pushed (e.g., v1.0.0)
   pull_request:
     branches: [ "main" ]
-  workflow_dispatch: # Allows you to trigger the build manually from the GitHub UI
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
 
+    # Grant write permissions to contents and releases so the runner can create the official release page
+    permissions:
+      contents: write
+
     steps:
-    # 1. Check out your code repository
+    # 1. Check out the code repository
     - name: Checkout Code
       uses: actions/checkout@v7
 
@@ -20,27 +25,51 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: '1.26.4' # Matching your active Go workspace standard
+        go-version: '1.26.4'
         cache: true
 
-    # 3. Pull down the exact AutoHotkey runtime version for bundling
-    - name: Download and Stage AutoHotkey Core
+    # 3. Pull down and verify the AutoHotkey runtime version for bundling
+    - name: Download and Verify AutoHotkey Core
       run: |
         New-Item -ItemType Directory -Force -Path .\bin\AutoHotkey
-        # Download the official stable v2 minimal zip package
-        Invoke-WebRequest -Uri "https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.26/AutoHotkey_2.0.26.zip" -OutFile .\ahk.zip
+        
+        $url = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.26/AutoHotkey_2.0.26.zip"
+
+        # REPLACE THIS STRING with the exact expected SHA-256 hash of the target zip file
+        $expectedHash = "43522AA3122A57784AC5DB30ABF85C2244475C36ACD7796E2C993355F9E926AE"
+        
+        # Download the file
+        Invoke-WebRequest -Uri $url -OutFile .\ahk.zip
+        
+        # Calculate the hash natively
+        $actualHash = (Get-FileHash .\ahk.zip -Algorithm SHA256).Hash.ToLower()
+        Write-Host "Downloaded File SHA-256: $actualHash"
+        
+        # Enforce cryptographic matching boundaries
+        if ($actualHash -ne $expectedHash.ToLower()) {
+            Write-Error "CRITICAL SECURITY FAULT: Downloaded file hash does not match expected signature!"
+            Exit 1
+        }
+        Write-Host "Security verification passed: Hashes match cleanly." -ForegroundColor Green
+        
+        # Extract and clean up
         Expand-Archive -Path .\ahk.zip -DestinationPath .\bin\AutoHotkey -Force
         Remove-Item -Path .\ahk.zip -Force
       shell: powershell
 
-    # 4. Compile your Go binaries using optimized production flags with dynamic metadata
+    # 4. Compile the Go binaries using optimized production flags with dynamic metadata
     - name: Compile Go Binaries
       run: |
         $version = "1.0.0"
+        # If the current execution context is a version tag, override the manual version string with the tag name
+        if ("${{ github.ref_type }}" -eq "tag") { $version = "${{ github.ref_name }}" }
+        
+        # Dynamically generate build metadata for embedding into the binaries
         $buildTime = Get-Date -Format "yyyy-MM-dd_HH:mm:ss"
         $commit = git rev-parse --short HEAD
-        $ldflags = "-s -w -H=windowsgui -X main.version=$version -X main.buildTime=$buildTime -X main.gitCommit=$commit"
+        $ldflags = "-s -w -H=windowsgui -X main.version=$version -X main.gitCommit=$commit -X main.buildTime=$buildTime"
         
+        # Compile the Launcher and DeployManager binaries with the specified ldflags
         Write-Host "Compiling Launcher with ldflags: $ldflags" -ForegroundColor Cyan
         go build -ldflags "$ldflags" -o .\bin\Launcher.exe .\cmd\launcher\main.go
         
@@ -49,15 +78,13 @@ jobs:
       shell: powershell
 
     # 5. Compile the installer package using Inno Setup
-    # Note: windows-latest runners have Inno Setup (ISCC) pre-installed out of the box!
     - name: Compile Inno Setup Installer
       run: |
-        # Hardened path token syntax to prevent x86 parenthesis string parsing faults
         $isccPath = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
         & $isccPath .\installer.iss
       shell: powershell
 
-    # 6. Upload the finished installer as a build artifact
+    # 6. Upload the finished installer as a temporary build artifact (Internal Testing)
     - name: Upload Installer Artifact
       uses: actions/upload-artifact@v7
       with:
@@ -65,3 +92,23 @@ jobs:
         path: .\bin\ErgonomicMouseSetup.exe
         if-no-files-found: error
         retention-days: 7
+
+    # 7. Automatically publish a formal public release whenever a version tag is pushed
+    - name: Create Production Release
+      if: startsWith(github.ref, 'refs/tags/v') # Only fires if the execution run context is a version tag
+      uses: ncipollo/release-action@v1
+      with:
+        artifacts: '.\bin\ErgonomicMouseSetup.exe'
+        allowUpdates: true
+        draft: false
+        prerelease: false
+        tag: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        body: |
+          Official compiled production release installer package for version ${{ github.ref_name }}.
+          
+          **Commit Context:** `${{ github.sha }}`
+          
+          ### 📦 Installation
+          1. Download the `ErgonomicMouseSetup.exe` asset below.
+          2. Execute the package to launch the deployment wizard interface.
