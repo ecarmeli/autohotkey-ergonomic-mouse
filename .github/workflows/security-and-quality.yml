@@ -121,9 +121,11 @@ jobs:
     name: Execute Production Build
     needs: [go_quality, go_security, repository_security_scan]
     if: github.event_name == 'push'
+    # Grant the reusable workflow permission to create releases
+    permissions:
+      contents: write
     uses: ./.github/workflows/build-and-release.yml
     with:
-      # Natively evaluate the context type before passing it to the reusable block
       is_tag: ${{ github.ref_type == 'tag' && 'True' || 'False' }}
       tag_name: ${{ github.ref_name }}
     secrets: inherit
