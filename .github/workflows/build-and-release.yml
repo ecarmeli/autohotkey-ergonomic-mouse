@@ -28,7 +28,7 @@ jobs:
       run: |
         New-Item -ItemType Directory -Force -Path .\bin\AutoHotkey
         # Download the official stable v2 minimal zip package
-        Invoke-WebRequest -Uri "https://www.autohotkey.com/download/ahk-v2.zip" -OutFile .\ahk.zip
+        Invoke-WebRequest -Uri "https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.26/AutoHotkey_2.0.26.zip" -OutFile .\ahk.zip
         Expand-Archive -Path .\ahk.zip -DestinationPath .\bin\AutoHotkey -Force
         Remove-Item -Path .\ahk.zip -Force
       shell: powershell
