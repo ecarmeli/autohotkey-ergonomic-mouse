@@ -28,19 +28,22 @@ jobs:
         ref: ${{ github.event.workflow_run.head_sha || github.sha }}
         fetch-depth: 0
 
-    # 2. Extract and preserve the true triggering Git reference metadata
+    # 2. Extract tag metadata passed down from the upstream scan
     - name: Parse Git Reference Metadata
       id: meta
       run: |
-        # Pull reference details directly out of the workflow run event payload
-        $trueRef = "${{ github.event.workflow_run.head_branch || github.ref_name }}"
-        Write-Host "True Triggering Reference identified as: $trueRef"
+        $trueRef = "main"
+        $isTag = "False"
         
-        $isTag = $false
-        # Detect if the source branch identifier follows your version tagging notation
-        if ($trueRef -match "^v\d+\.\d+\.\d+$") { $isTag = $true }
+        # Check if the upstream scan dropped a verification tag file
+        if (Test-Path .\triggering-tag.txt) {
+            $trueRef = (Get-Content .\triggering-tag.txt).Trim()
+            $isTag = "True"
+        }
         
-        # Save variables to output step tokens for subsequent conditional blocks
+        Write-Host "Evaluated Reference Target: $trueRef"
+        Write-Host "Is Release Tag Event: $isTag"
+        
         echo "true_version=$trueRef" >> $env:GITHUB_OUTPUT
         echo "is_release_tag=$isTag" >> $env:GITHUB_OUTPUT
       shell: powershell
