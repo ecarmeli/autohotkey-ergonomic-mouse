@@ -24,7 +24,7 @@ PrivilegesRequiredOverrideText2=System Mode (All users, administrator permission
 
 [Files]
 Source: ".\bin\Launcher.exe"; DestDir: "{code:GetInstallDir}"; Flags: ignoreversion
-Source: ".\bin\ErgonomicMouse.ahk"; DestDir: "{code:GetInstallDir}"; Flags: ignoreversion
+Source: ".\src\ErgonomicMouse.ahk"; DestDir: "{code:GetInstallDir}"; Flags: ignoreversion
 Source: ".\bin\DeployManager.exe"; DestDir: "{code:GetInstallDir}"; Flags: ignoreversion
 Source: ".\bin\AutoHotkey\*"; DestDir: "{code:GetInstallDir}\AutoHotkey"; Flags: ignoreversion recursesubdirs createallsubdirs
 

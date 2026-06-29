@@ -24,7 +24,7 @@ var (
 // 1. Constants
 // =========================================================================
 
-const remoteURL = "https://raw.githubusercontent.com/ecarmeli/autohotkey-ergonomic-mouse/main/bin/ErgonomicMouse.ahk"
+const remoteURL = "https://raw.githubusercontent.com/ecarmeli/autohotkey-ergonomic-mouse/main/src/ErgonomicMouse.ahk"
 
 // =========================================================================
 // 2. Configuration Struct
