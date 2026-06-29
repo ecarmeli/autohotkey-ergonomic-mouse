@@ -1,11 +1,17 @@
 name: Build and Package Installer
 
 on:
-  # Let the event pass the router gate for any successful upstream run
-  workflow_run:
-    workflows: ["Code Quality and Security Analysis"]
-    types:
-      - completed
+  workflow_call:
+    inputs:
+      is_tag:
+        description: 'Explicit flag indicating if the triggering event was a Git Tag push'
+        required: true
+        type: string
+      tag_name:
+        description: 'The actual tag string context'
+        required: false
+        default: 'main'
+        type: string
 
 jobs:
   build:
@@ -32,14 +38,9 @@ jobs:
     - name: Parse Git Reference Metadata
       id: meta
       run: |
-        $trueRef = "main"
-        $isTag = "False"
-        
-        # Check if the upstream scan dropped a verification tag file
-        if (Test-Path .\triggering-tag.txt) {
-            $trueRef = (Get-Content .\triggering-tag.txt).Trim()
-            $isTag = "True"
-        }
+        # Read the explicit parameters passed from the caller workflow inputs context
+        $trueRef = "${{ inputs.tag_name }}"
+        $isTag = "${{ inputs.is_tag }}"
         
         Write-Host "Evaluated Reference Target: $trueRef"
         Write-Host "Is Release Tag Event: $isTag"

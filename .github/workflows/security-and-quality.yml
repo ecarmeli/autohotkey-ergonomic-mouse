@@ -111,3 +111,21 @@ jobs:
         with:
           name: triggering-tag
           path: triggering-tag.txt
+
+
+  # --------------------------------------------------------------------
+  # Trigger the installer build directly within the same runtime context
+  # --------------------------------------------------------------------
+
+  trigger_build:
+    name: Execute Production Build
+    needs: [go_quality, go_security, repository_security_scan]
+    if: github.event_name == 'push'
+    # Grant the reusable workflow permission to create releases
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-and-release.yml
+    with:
+      is_tag: ${{ github.ref_type == 'tag' && 'True' || 'False' }}
+      tag_name: ${{ github.ref_name }}
+    secrets: inherit
