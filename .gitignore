@@ -10,6 +10,7 @@ $RECYCLE.BIN/
 # Executable Files
 # ==========================================
 *.exe
+bin/AutoHotkey/
 
 # ==========================================
 # Editor / IDE Specific (VS Code, etc.)
