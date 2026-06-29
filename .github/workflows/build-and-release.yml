@@ -106,27 +106,16 @@ jobs:
       shell: powershell
 
     # 6 Security Scan Step
-    - name: Scan Installer with Defender
-      run: |
-        Write-Host "Updating Defender signatures..."
-        Update-MpSignature | Out-Null
-        
-        Write-Host "Starting Defender scan on ErgonomicMouseSetup.exe..."
-        Start-MpScan -ScanType CustomScan -ScanPath ".\bin\ErgonomicMouseSetup.exe" | Out-Null
-        
-        # Give Defender a moment to process the scan results
-        Start-Sleep -Seconds 5
-        
-        $detections = Get-MpThreatDetection
-        
-        if ($detections) {
-            Write-Host "⚠️ SECURITY ALERT: Threats detected!" -ForegroundColor Red
-            $detections | Select-Object * | Format-List | Out-String | Write-Host
-            Write-Error "CRITICAL SECURITY FAULT: Malware detected in installer!"
-            exit 1
-        }
-        Write-Host "Defender scan passed: No threats detected." -ForegroundColor Green
-      shell: powershell
+    - name: Scan Installer with Virus Scanner
+      uses: hugoalh/scan-virus-ghaction@v0.20.0
+      with:
+        clamav_enable: True
+        yara_enable: True
+        # Only scan your specific installer file
+        ignores_pre: |-
+          Param($ElementPreMeta)
+          # Use -notlike with wildcards to be OS-agnostic
+          Return ($ElementPreMeta.Path -notlike '*bin*ErgonomicMouseSetup.exe')
       
     # 7. Upload the finished installer as a temporary build artifact
     - name: Upload Installer Artifact
