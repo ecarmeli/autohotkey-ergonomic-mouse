@@ -108,16 +108,20 @@ jobs:
     # 6 Security Scan Step
     - name: Scan Installer with Defender
       run: |
-        Write-Host "Starting Defender scan on ErgonomicMouseSetup.exe..."
-        Start-MpScan -ScanType CustomScan -ScanPath ".\bin\ErgonomicMouseSetup.exe" -ErrorAction SilentlyContinue
+        Write-Host "Updating Defender signatures..."
+        Update-MpSignature | Out-Null
         
-        $detections = Get-MpThreatDetection -ThreatFilePath ".\bin\ErgonomicMouseSetup.exe"
+        Write-Host "Starting Defender scan on ErgonomicMouseSetup.exe..."
+        Start-MpScan -ScanType CustomScan -ScanPath ".\bin\ErgonomicMouseSetup.exe" | Out-Null
+        
+        # Give Defender a moment to process the scan results
+        Start-Sleep -Seconds 5
+        
+        $detections = Get-MpThreatDetection
         
         if ($detections) {
             Write-Host "⚠️ SECURITY ALERT: Threats detected!" -ForegroundColor Red
-            # This will serialize the detection object and print it to your logs
             $detections | Select-Object * | Format-List | Out-String | Write-Host
-            
             Write-Error "CRITICAL SECURITY FAULT: Malware detected in installer!"
             exit 1
         }
