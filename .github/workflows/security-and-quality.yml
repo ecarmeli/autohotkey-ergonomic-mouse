@@ -17,15 +17,14 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v7       # Pull your repository into the runner
+        uses: actions/checkout@v7       
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v6       
         with:
           go-version: '1.26.4'          # Specify Go version
           cache: true                   # Enable module caching (speeds up builds)
 
-      
       - name: Verify Build (exclude /bin dir)
         run: go build ./...             # Ensure the code compiles successfully (excluding /bin)  
 
@@ -47,10 +46,11 @@ jobs:
           go install honnef.co/go/tools/cmd/staticcheck@latest
           staticcheck ./...         # Run deeper linting checks
 
-      - name: Build Windows binaries
+      - name: Build Windows binaries (Dry Run)
         run: |
-          GOOS=windows GOARCH=amd64 go build -o bin/Launcher.exe ./cmd/launcher
-          GOOS=windows GOARCH=amd64 go build -o bin/DeployManager.exe ./cmd/deploymanager
+          # Mirroring production linker flags for accurate dry-run validation
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -H=windowsgui" -o bin/Launcher.exe ./cmd/launcher
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -H=windowsgui" -o bin/DeployManager.exe ./cmd/deploymanager
 
 
   # ---------------------------------------------
@@ -89,7 +89,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Run Trivy Vulnerability Scanner
-        uses: aquasecurity/trivy-action@v0.36.0   # Pinned version for stability
+        uses: aquasecurity/trivy-action@v0.36.0 
         with:
           scan-type: 'fs'                         # Scan filesystem (entire repo)
           scan-ref: '.'                           # Start from repo root
@@ -98,7 +98,4 @@ jobs:
           exit-code: '1'                          # Fail pipeline on findings
           ignore-unfixed: true                    # Ignore vulns without patches
           severity: 'CRITICAL,HIGH'               # Only fail on high-impact issues
-          scanners: 'vuln,secret,config'          # Scan for:
-                                                  # - vulnerabilities (dependencies)
-                                                  # - secrets (API keys, creds)
-                                                  # - config issues (misconfigurations)
+          scanners: 'vuln,secret,config'          # Scan for vulnerabilities, secrets, and config issues
