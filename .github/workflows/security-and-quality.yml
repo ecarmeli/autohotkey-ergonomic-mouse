@@ -3,6 +3,7 @@ name: Code Quality and Security Analysis
 on:
   push:
     branches: [ main ]                  # Run on every push to main branch
+    tags: [ "v*.*.*" ]                  # Ensures validation also runs on tag pushes
   pull_request:
     branches: [ main ]                  # Run on every PR targeting main
 
@@ -99,3 +100,14 @@ jobs:
           ignore-unfixed: true                    # Ignore vulns without patches
           severity: 'CRITICAL,HIGH'               # Only fail on high-impact issues
           scanners: 'vuln,secret,config'          # Scan for vulnerabilities, secrets, and config issues
+
+      - name: Save Tag Context for Downstream Build
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: echo "${{ github.ref_name }}" > triggering-tag.txt
+
+      - name: Upload Tag Artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v7
+        with:
+          name: triggering-tag
+          path: triggering-tag.txt
