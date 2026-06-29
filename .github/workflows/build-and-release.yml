@@ -98,7 +98,7 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/v') # Only fires if the execution run context is a version tag
       uses: ncipollo/release-action@v1
       with:
-        artifacts: ".\bin\ErgonomicMouseSetup.exe"
+        artifacts: '.\bin\ErgonomicMouseSetup.exe'
         allowUpdates: true
         draft: false
         prerelease: false
