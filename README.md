@@ -2,46 +2,50 @@
 
 A deployment-ready AutoHotkey v2 solution for ergonomic keyboard-to-mouse mapping, featuring seamless, automated background updates.
 
-this project packages everything into a unified Windows installer executable (`ErgonomicMouseSetup.exe`) that handles clean deployments, native privilege handoffs, and silent uninstallation directly from the Windows App settings.
+This project packages everything into a unified Windows installer executable (`ErgonomicMouseSetup.exe`) that handles clean deployments, native privilege handoffs, and silent uninstallation directly from the Windows App settings.
 
-1. Download the latest `ErgonomicMouseSetup.exe` from the repository releases.
-2. Double-click the installer and follow the instructions.
+## 📥 Quick Start
+1. Download the latest `ErgonomicMouseSetup.exe` from the repository [Releases](https://github.com/ecarmeli/autohotkey-ergonomic-mouse/releases).
+2. Double-click the installer and follow the wizard instructions.
+
+---
 
 ## 🩺 Why This Project Exists: Vision & Objectives
 
-> **The Problem:** Traditional navigation forces your mouse hand to handle positioning, scrolling, and thousands of repetitive clicks daily, causing chronic finger and wrist strain.  
-> **The Solution:** By separating cursor movement from clicking, this project creates a balanced, two-handed layout built for long-term joint health and a pain-free workflow.
+* **The Problem:** Traditional navigation forces your mouse hand to handle positioning, scrolling, and thousands of repetitive clicks daily, causing chronic finger/wrist strain and Repetitive Strain Injuries (RSI).
+* **The Solution:** Shifting primary mouse clicks directly to the keyboard's middle Function keys (`F5`-`F7`). By separating cursor movement from clicking, this project creates a balanced, two-handed workflow that minimizes mechanical fatigue on your primary joints.
 
-This project was born out of a vital need for workspace ergonomics and physical strain relief. In a traditional computing setup, the primary mouse hand bears the brunt of continuous, repetitive stress from constant finger clicking — a leading cause of hand fatigue and repetitive strain injuries (RSI).
-
-This solution rebalances that physical workload by shifting primary mouse click actions directly to the keyboard's middle Function keys. By utilizing your secondary hand to execute clicks, you instantly offload the mechanical stress from your mouse hand. This creates a highly efficient, two-handed workflow that minimizes finger strain and promotes a much healthier, more comfortable computing experience.
+---
 
 ## 🛠️ Installation & Management
 
-The installation wizard dynamically adapts its user interface based on whether it is running standard or elevated:
+The installation wizard dynamically adapts its execution layer based on user privilege:
 
-* **User Mode (Standard Privilege):**
-  * Installs strictly within the current user profile (`%LocalAppData%\ErgonomicMouse`).
-  * Registers interactive logon tasks utilizing standard user context tokens.
-  * Recommended for restricted corporate environments without administrative privileges.
-* **System Mode (Requires Administrator Permission):**
-  * Installs globally to machine directories (`%ProgramData%\ErgonomicMouse`).
-  * Leverages a native Windows UAC self-elevation handoff block.
-  * Installs a high-integrity Task Scheduler logon hook to ensure script functionality remains active even when interacting with administrative applications (e.g., Task Manager, elevated IDEs/terminals).
+* **User Mode (Standard Privilege):** Installs strictly within `%LocalAppData%\ErgonomicMouse` and registers interactive logon tasks. Ideal for restricted corporate environments without administrative rights.
+* **System Mode (Elevated Privilege):** Installs globally to `%ProgramData%\ErgonomicMouse` utilizing a native Windows UAC self-elevation handoff block. Installs a high-integrity Task Scheduler logon hook to ensure script functionality remains active even when interacting with administrative applications (e.g., Task Manager, elevated IDEs, or terminals).
 
-### Smart Guardrails & Self-Healing Maintenance
-* **State Detection:** Double-clicking the installer when an existing installation is detected automatically triggers a silent, structured teardown of background layers before applying updates.
-* **Process Sledgehammer:** Uninstallation automatically terminates running loops (`AutoHotkey64.exe` and `Launcher.exe`) to prevent file-lock conflicts, ensuring a 100% clean directory wipe.
-* **Centralized Telemetry:** Native installation and deployment logs are captured and automatically mirrored straight to the operational data directory (`\logs\install.log`) for quick diagnostic analysis.
+---
 
-## 🚀 Key Features & Ergonomic Design
+## 💻 Verified Compatibility
 
-* **RSI Strain Relief:** Shifts repetitive click stress from your mouse hand to the keyboard's Function row, instantly balancing the physical workload across both hands to prevent finger and wrist fatigue.
-* **Tendon Protection:** Holding down a hotkey triggers just one continuous mouse click instead of sending rapid clicks.
+This solution is engineered to play nicely out of the box with core enterprise productivity software and development tools:
+
+* **Browsers:** Microsoft Edge, Google Chrome
+* **Productivity:** Microsoft Office Suite
+* **IDEs & Editors:** Visual Studio Code, Notepad++
+
+---
+
+## ✨ Key Features & Ergonomic Design
+
+* **RSI Strain Relief:** Balances physical workload across both hands by moving high-frequency clicking tasks away from the mouse.
+* **Tendon Protection:** Holding down a key triggers a single continuous mouse click instead of sending rapid, exhausting inputs.
 * **Frictionless Drag-and-Drop:** An automatic 2px micro-movement triggers on initial click-hold, forcing picky applications or IDEs to register drag actions instantly without requiring a tense, heavy grip.
-* **Horizontal Scrolling:** Bypasses rigid OS scroll constraints to deliver ultra-smooth side-scrolling via `Shift + Scroll Wheel` for effortless timeline or spreadsheet panning.
-* **Instant Master Toggle:** Uses the physical `Scroll Lock` key (and its native LED) as a global master switch to seamlessly transition between ergonomic mouse mode and standard typing.
-* **"Set and Forget" Automation:** A silent background Go engine uses native COM interfaces to establish persistent logon triggers, managing updates seamlessly with zero user friction.
+* **Smooth Side-Scrolling:** Use `Shift + Scroll Wheel` to pan horizontally across wide data structures, codebases, or spreadsheets seamlessly.
+* **Instant Master Toggle:** Uses the physical `Scroll Lock` key (and its native hardware LED) as a global toggle to seamlessly transition between mouse mode and standard typing.
+* **"Set and Forget" Automation:** A silent background engine manages seamless upgrades and a clean uninstallation automatically, ensuring zero user friction.
+
+---
 
 ## 🎮 Keymaps & Controls
 
@@ -54,6 +58,8 @@ The installation wizard dynamically adapts its user interface based on whether i
 | **`Shift + WheelUp`** | Horizontal Scroll Left | High-precision messaging bypasses OS inertia limits. |
 | **`Shift + WheelDown`** | Horizontal Scroll Right| High-precision messaging bypasses OS inertia limits. |
 | **`Ctrl + F12`** | Panic Release | Instantly forces a release of all virtual mouse buttons if stuck. |
+
+---
 
 ## 📂 Repository Structure
 
@@ -79,6 +85,8 @@ autohotkey-ergonomic-mouse/
 ├── .gitignore
 └── README.md
 ```
+
+---
 
 ## ⚙️ Build & Development
 
@@ -106,6 +114,8 @@ Ensure you have Inno Setup 6+ installed locally, pull the AutoHotkey binaries in
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" .\installer.iss
 ```
 
+---
+
 ## 🔄 CI/CD Pipeline
 
 The project features an automated, multi-tier GitHub Actions delivery structure:
@@ -119,6 +129,8 @@ The project features an automated, multi-tier GitHub Actions delivery structure:
 * Dynamically downloads and stages stable AutoHotkey core dependency distributions.
 * Injects variables (`version`, `buildTime`, `gitCommit`) directly into the compiled Go assets.
 * Invokes `ISCC.exe` out-of-the-box to package and export a compiled `ErgonomicMouseSetup.exe` artifact.
+
+---
 
 ## 🔄 Update Model (High-Level)
 
