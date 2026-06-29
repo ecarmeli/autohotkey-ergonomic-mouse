@@ -105,7 +105,26 @@ jobs:
         & $isccPath .\installer.iss
       shell: powershell
 
-    # 6. Upload the finished installer as a temporary build artifact
+    # 6 Security Scan Step
+    - name: Scan Installer with Defender
+      run: |
+        Write-Host "Starting Defender scan on ErgonomicMouseSetup.exe..."
+        Start-MpScan -ScanType CustomScan -ScanPath ".\bin\ErgonomicMouseSetup.exe" -ErrorAction SilentlyContinue
+        
+        $detections = Get-MpThreatDetection -ThreatFilePath ".\bin\ErgonomicMouseSetup.exe"
+        
+        if ($detections) {
+            Write-Host "⚠️ SECURITY ALERT: Threats detected!" -ForegroundColor Red
+            # This will serialize the detection object and print it to your logs
+            $detections | Select-Object * | Format-List | Out-String | Write-Host
+            
+            Write-Error "CRITICAL SECURITY FAULT: Malware detected in installer!"
+            exit 1
+        }
+        Write-Host "Defender scan passed: No threats detected." -ForegroundColor Green
+      shell: powershell
+      
+    # 7. Upload the finished installer as a temporary build artifact
     - name: Upload Installer Artifact
       uses: actions/upload-artifact@v7
       with:
@@ -114,7 +133,7 @@ jobs:
         if-no-files-found: error
         retention-days: 7
 
-    # 7. Automatically publish a formal public release whenever a version tag triggers the run chain
+    # 8. Automatically publish a formal public release whenever a version tag triggers the run chain
     - name: Create Production Release
       if: steps.meta.outputs.is_release_tag == 'True'
       uses: ncipollo/release-action@v1
