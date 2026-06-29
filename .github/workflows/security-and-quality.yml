@@ -121,7 +121,7 @@ jobs:
     name: Execute Production Build
     needs: [go_quality, go_security, repository_security_scan]
     if: github.event_name == 'push'
-    uses: ./.github/workflows/build-and-release.yml@main
+    uses: ./.github/workflows/build-and-release.yml
     with:
       # Natively evaluate the context type before passing it to the reusable block
       is_tag: ${{ github.ref_type == 'tag' && 'True' || 'False' }}
