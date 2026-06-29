@@ -67,11 +67,10 @@ This solution is engineered to play nicely out of the box with core enterprise p
 autohotkey-ergonomic-mouse/
 │
 ├── .github/
-│   └── workflows/
-│       ├── security-and-quality.yml   # CI: compilation validation, linting, security scanning
-│       └── build-and-release.yml      # CD: Automated Go compilation & Inno Setup packaging
-│
-├── bin/                               # Local/CI compilation target directory
+│   ├── workflows/
+│   │   ├── security-and-quality.yml   # CI: compilation validation, linting, security scanning
+│   │   └── build-and-release.yml      # CD: Automated Go compilation & Inno Setup packaging
+│   └── dependabot.yml
 │
 ├── cmd/
 │   ├── launcher/
@@ -79,6 +78,9 @@ autohotkey-ergonomic-mouse/
 │   └── deploymanager/ 
 │       └── main.go                    # State manager engine; configures COM tasks & logs
 │ 
+├── src/
+│   └── ErgonomicMouse.ahk             # Runtime AutoHotkey source script
+│
 ├── installer.iss                      # Inno Setup blueprint compiler configuration
 ├── go.mod                             # Go module definition
 ├── go.sum                             # Dependency lock file
