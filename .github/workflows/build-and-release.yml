@@ -4,6 +4,7 @@ on:
   # Orchestrates execution ONLY after the validation suite finishes successfully
   workflow_run:
     workflows: ["Code Quality and Security Analysis"] # Must match the exact name string
+    branches: [ "main" ] # Prevents feature branches from triggering this workflow
     types:
       - completed
 
