@@ -49,7 +49,7 @@ jobs:
       run: |
         New-Item -ItemType Directory -Force -Path .\bin\AutoHotkey
         $url = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.26/AutoHotkey_2.0.26.zip"
-        $expectedHash = "YOUR_SHA256_HASH_HERE"
+        $expectedHash = "43522AA3122A57784AC5DB30ABF85C2244475C36ACD7796E2C993355F9E926AE"
         
         Invoke-WebRequest -Uri $url -OutFile .\ahk.zip
         $actualHash = (Get-FileHash .\ahk.zip -Algorithm SHA256).Hash.ToLower()
@@ -58,7 +58,10 @@ jobs:
             Write-Error "CRITICAL SECURITY FAULT: Downloaded file hash mismatch!"
             Exit 1
         }
-        
+
+        Write-Host "Expected hash: $expectedHash"
+        Write-Host "Actual hash: $actualHash"
+
         Expand-Archive -Path .\ahk.zip -DestinationPath .\bin\AutoHotkey -Force
         Remove-Item -Path .\ahk.zip -Force
       shell: powershell
