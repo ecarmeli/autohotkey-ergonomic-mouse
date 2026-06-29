@@ -9,8 +9,7 @@ on:
         type: string
       tag_name:
         description: 'The actual tag string context'
-        required: false
-        default: 'main'
+        required: true
         type: string
 
 jobs:
@@ -38,6 +37,19 @@ jobs:
         $trueRef = "${{ inputs.tag_name }}"
         $isTag = "${{ inputs.is_tag }}"
         
+        # 🛡️ SECURITY VALIDATION 🛡️
+        # Only allow alphanumeric characters, periods, hyphens, and slashes.
+        # This explicitly blocks shell injection characters like ; & | $ ( )
+        if ($trueRef -notmatch '^[a-zA-Z0-9.\-\/]+$') {
+            Write-Error "CRITICAL SECURITY FAULT: Malformed tag_name payload detected. Execution halted."
+            exit 1
+        }
+
+        if ($isTag -ne "True" -and $isTag -ne "False") {
+            Write-Error "CRITICAL SECURITY FAULT: Invalid boolean input '$isTag' for is_tag."
+            exit 1
+        }
+            
         Write-Host "Evaluated Reference Target: $trueRef"
         Write-Host "Is Release Tag Event: $isTag"
         
