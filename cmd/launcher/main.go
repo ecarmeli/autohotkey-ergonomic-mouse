@@ -39,14 +39,6 @@ type Config struct {
 	LogFile       string
 }
 
-func requiredEnv(name string) (string, error) {
-	v := os.Getenv(name)
-	if v == "" {
-		return "", fmt.Errorf("required environment variable %s is not set", name)
-	}
-	return v, nil
-}
-
 func buildConfig() (*Config, error) {
 	mode := flag.String("mode", "system", "Execution mode: 'system' or 'user'")
 	flag.Parse()
@@ -57,28 +49,17 @@ func buildConfig() (*Config, error) {
 
 	cfg := &Config{Mode: *mode}
 
-	if cfg.Mode == "user" {
-		localAppData, err := requiredEnv("LOCALAPPDATA")
-		if err != nil {
-			return nil, err
-		}
-
-		cfg.TargetDir = filepath.Join(localAppData, "ErgonomicMouse")
-		cfg.AHKExe = filepath.Join(cfg.TargetDir, "AutoHotkey", "AutoHotkey64.exe")
-	} else {
-		progData, err := requiredEnv("PROGRAMDATA")
-		if err != nil {
-			return nil, err
-		}
-		progFiles, err := requiredEnv("ProgramFiles")
-		if err != nil {
-			return nil, err
-		}
-
-		cfg.TargetDir = filepath.Join(progData, "ErgonomicMouse")
-		cfg.AHKExe = filepath.Join(progFiles, "AutoHotkey", "v2", "AutoHotkey64.exe")
+	// 1. Get the absolute path of wherever Launcher.exe is currently running from
+	exePath, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("could not determine execution path: %v", err)
 	}
 
+	// 2. The TargetDir is simply the folder containing Launcher.exe
+	cfg.TargetDir = filepath.Dir(exePath)
+
+	// 3. Map all internal assets relative to that exact directory
+	cfg.AHKExe = filepath.Join(cfg.TargetDir, "AutoHotkey", "AutoHotkey64.exe")
 	cfg.AHKScriptPath = filepath.Join(cfg.TargetDir, "ErgonomicMouse.ahk")
 	cfg.ETagFile = cfg.AHKScriptPath + ".etag"
 	cfg.LogFile = filepath.Join(cfg.TargetDir, "logs", "launcher.log")
