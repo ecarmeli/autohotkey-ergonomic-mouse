@@ -1,0 +1,67 @@
+name: Build and Package Installer
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch: # Allows you to trigger the build manually from the GitHub UI
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    # 1. Check out your code repository
+    - name: Checkout Code
+      uses: actions/checkout@v7
+
+    # 2. Set up the Go compilation environment
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: '1.26.4' # Matching your active Go workspace standard
+        cache: true
+
+    # 3. Pull down the exact AutoHotkey runtime version for bundling
+    - name: Download and Stage AutoHotkey Core
+      run: |
+        New-Item -ItemType Directory -Force -Path .\bin\AutoHotkey
+        # Download the official stable v2 minimal zip package
+        Invoke-WebRequest -Uri "https://www.autohotkey.com/download/ahk-v2.zip" -OutFile .\ahk.zip
+        Expand-Archive -Path .\ahk.zip -DestinationPath .\bin\AutoHotkey -Force
+        Remove-Item -Path .\ahk.zip -Force
+      shell: powershell
+
+    # 4. Compile your Go binaries using optimized production flags with dynamic metadata
+    - name: Compile Go Binaries
+      run: |
+        $version = "1.0.0"
+        $buildTime = Get-Date -Format "yyyy-MM-dd_HH:mm:ss"
+        $commit = git rev-parse --short HEAD
+        $ldflags = "-s -w -H=windowsgui -X main.version=$version -X main.buildTime=$buildTime -X main.gitCommit=$commit"
+        
+        Write-Host "Compiling Launcher with ldflags: $ldflags" -ForegroundColor Cyan
+        go build -ldflags "$ldflags" -o .\bin\Launcher.exe .\cmd\launcher\main.go
+        
+        Write-Host "Compiling DeployManager with ldflags: $ldflags" -ForegroundColor Cyan
+        go build -ldflags "$ldflags" -o .\bin\DeployManager.exe .\cmd\deploymanager\main.go
+      shell: powershell
+
+    # 5. Compile the installer package using Inno Setup
+    # Note: windows-latest runners have Inno Setup (ISCC) pre-installed out of the box!
+    - name: Compile Inno Setup Installer
+      run: |
+        # Hardened path token syntax to prevent x86 parenthesis string parsing faults
+        $isccPath = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+        & $isccPath .\installer.iss
+      shell: powershell
+
+    # 6. Upload the finished installer as a build artifact
+    - name: Upload Installer Artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: ErgonomicMouseSetup-Latest
+        path: .\bin\ErgonomicMouseSetup.exe
+        if-no-files-found: error
+        retention-days: 7
