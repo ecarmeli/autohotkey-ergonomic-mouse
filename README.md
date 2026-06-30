@@ -64,9 +64,10 @@ This solution is engineered to play nicely out of the box with core enterprise p
 ## 📋 System Requirements
 
 * **Operating System:** Microsoft Windows 10 or Windows 11 (64-bit architecture required).
-* **Execution Privileges:** * *Standard User Mode:* Does **not** require local administrator rights (installs isolated to user profile space).
-  * *System-Wide Mode:* Local administrator privileges are required during setup to bind tasks directly to the elevated Task Scheduler engine.
-* **Dependencies:** None. The installer bundles the precise, verified AutoHotkey v2 core binary and compiled Go launcher modules out of the box.
+* **Execution Privileges:**
+  * *Standard User Mode:* Does not require local administrator rights - installs to user profile.
+  * *System-Wide Mode:* Requires local administrator rights.
+* **Dependencies:** None. The installer bundles core binary and compiled Go launcher modules out of the box.
 * **Hardware Interactivity:** Mappings take advantage of standard peripheral inputs. The Master Toggle relies on a physical `Scroll Lock` key layout; systems missing this physical key can trigger it via standard virtual keyboard overlays or alternate custom remappings.
 
 ---
