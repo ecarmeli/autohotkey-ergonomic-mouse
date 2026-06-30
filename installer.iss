@@ -19,8 +19,11 @@ SetupLogging=yes
 [Messages]
 PrivilegesRequiredOverrideTitle=Installation Mode
 PrivilegesRequiredOverrideInstruction=Choose how Ergonomic Mouse Keys should be installed.
-PrivilegesRequiredOverrideText1=User Mode (Current user only)
-PrivilegesRequiredOverrideText2=System Mode (All users, administrator permission required)
+ConfirmUninstall=Are you sure you want to completely remove Ergonomic Mouse Keys and all background tasks?
+DirExists=The folder: %n%n%1%n%nalready exists. Would you like to overwrite the existing configuration?
+; Native overrides for the final uninstall result messages
+UninstalledAll=Ergonomic Mouse Keys was successfully removed from your computer.
+UninstalledMost=Uninstallation completed with warnings. Some files or background tasks could not be removed.
 
 [Files]
 Source: ".\bin\Launcher.exe"; DestDir: "{code:GetInstallDir}"; Flags: ignoreversion
@@ -31,7 +34,9 @@ Source: ".\bin\AutoHotkey\*"; DestDir: "{code:GetInstallDir}\AutoHotkey"; Flags:
 [Run]
 Filename: "{code:GetInstallDir}\DeployManager.exe"; Parameters: "--mode=system --install"; Flags: runhidden; Check: IsAdminInstallMode
 Filename: "{code:GetInstallDir}\DeployManager.exe"; Parameters: "--mode=user --install"; Flags: runhidden; Check: not IsAdminInstallMode
-Filename: "{code:GetInstallDir}\Launcher.exe"; Flags: nowait postinstall skipifsilent; Description: "Start Ergonomic Mouse Keys"
+; Run the correct scheduled task based on the user's selected installation mode
+; A single entry that resolves the correct Task name at runtime
+Filename: "schtasks"; Parameters: "/Run /TN ""{code:GetTaskName}"""; Flags: runhidden postinstall skipifsilent runascurrentuser; Description: "Start Ergonomic Mouse Keys"
 
 [UninstallRun]
 ; Kill active processes to prevent file-lock "Access Denied" errors during uninstallation
@@ -99,7 +104,6 @@ var
   iResultCode: Integer;
 begin
   Result := True;
-
   ExistingMode := GetInstalledMode();
   sUnInstallString := GetUninstallString();
 
@@ -119,21 +123,16 @@ begin
     Exit;
   end;
 
-if sUnInstallString <> '' then
-begin
-  if Exec('>', sUnInstallString + ' /SILENT /NORESTART', '', SW_SHOWNORMAL, ewWaitUntilTerminated, iResultCode) then
+  if sUnInstallString <> '' then
   begin
-    Result := False;
-    Exit;
-  end
-  else
-  begin
-    MsgBox('Uninstallation failed: ' + SysErrorMessage(iResultCode), mbError, MB_OK);
-    Result := False;
-    Exit;
+    // User consented. Run the uninstaller completely hidden so it doesn't steal focus or create a taskbar icon.
+    if not Exec('>', sUnInstallString + ' /VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, iResultCode) then
+    begin
+      MsgBox('Uninstallation failed: ' + SysErrorMessage(iResultCode), mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
   end;
-end;
-
 end; 
 
 function GetInstallDir(Param: String): String;
@@ -146,7 +145,15 @@ begin
     Result := ExpandConstant('{localappdata}\ErgonomicMouse');
 end;
 
-// 3. Centralized Logging Handoff
+function GetTaskName(Param: String): String;
+begin
+  if IsAdminInstallMode then
+    Result := 'ErgonomicMouseMapping'
+  else
+    Result := 'ErgonomicMouseMapping-User';
+end;
+
+// Centralized Logging Handoff
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssDone then
