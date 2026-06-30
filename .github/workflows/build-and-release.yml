@@ -13,51 +13,45 @@ on:
         type: string
 
 jobs:
+  # ==========================================
+  # STAGE 1: BUILD (Windows)
+  # ==========================================
   build:
     name: Build and Package Installer
     runs-on: windows-latest
-
     permissions:
       contents: write
+    # We must expose these variables to the downstream jobs
+    outputs:
+      is_release_tag: ${{ steps.meta.outputs.is_release_tag }}
+      true_version: ${{ steps.meta.outputs.true_version }}
 
     steps:
-    # 1. Check out the exact code reference that triggered the upstream validation scan
     - name: Checkout Code
       uses: actions/checkout@v7
       with:
-        # Dynamically pulls down the exact tagged commit or head commit from the upstream execution payload
         ref: ${{ github.event.workflow_run.head_sha || github.sha }}
         fetch-depth: 0
 
-    # 2. Extract tag metadata passed down from the upstream scan
     - name: Parse Git Reference Metadata
       id: meta
       run: |
-        # Read the explicit parameters passed from the caller workflow inputs context
         $trueRef = "${{ inputs.tag_name }}"
         $isTag = "${{ inputs.is_tag }}"
         
-        # 🛡️ SECURITY VALIDATION 🛡️
-        # Only allow alphanumeric characters, periods, hyphens, and slashes.
-        # This explicitly blocks shell injection characters like ; & | $ ( )
         if ($trueRef -notmatch '^[a-zA-Z0-9.\-\/]+$') {
             Write-Error "CRITICAL SECURITY FAULT: Malformed tag_name payload detected. Execution halted."
             exit 1
         }
-
         if ($isTag -ne "True" -and $isTag -ne "False") {
             Write-Error "CRITICAL SECURITY FAULT: Invalid boolean input '$isTag' for is_tag."
             exit 1
         }
             
-        Write-Host "Evaluated Reference Target: $trueRef"
-        Write-Host "Is Release Tag Event: $isTag"
-        
         echo "true_version=$trueRef" >> $env:GITHUB_OUTPUT
         echo "is_release_tag=$isTag" >> $env:GITHUB_OUTPUT
       shell: powershell
 
-    # 3. Pull down and verify the AutoHotkey runtime version for bundling
     - name: Download and Verify AutoHotkey Core
       run: |
         New-Item -ItemType Directory -Force -Path .\bin\AutoHotkey
@@ -71,74 +65,91 @@ jobs:
             Write-Error "CRITICAL SECURITY FAULT: Downloaded file hash mismatch!"
             Exit 1
         }
-
-        Write-Host "Expected hash: $expectedHash"
-        Write-Host "Actual hash: $actualHash"
-
         Expand-Archive -Path .\ahk.zip -DestinationPath .\bin\AutoHotkey -Force
         Remove-Item -Path .\ahk.zip -Force
       shell: powershell
 
-    # 4. Compile your Go binaries using optimized production flags with dynamic metadata
     - name: Compile Go Binaries
       run: |
-        # Fallback default versioning
         $version = "1.0.0"
-        # If the true source identifier is a version tag, override the version string metadata
         if ("${{ steps.meta.outputs.is_release_tag }}" -eq "True") { $version = "${{ steps.meta.outputs.true_version }}" }
         
         $buildTime = Get-Date -Format "yyyy-MM-dd_HH:mm:ss"
         $commit = git rev-parse --short HEAD
         $ldflags = "-s -w -H=windowsgui -X main.version=$version -X main.gitCommit=$commit -X main.buildTime=$buildTime"
         
-        Write-Host "Compiling Launcher with version: $version" -ForegroundColor Cyan
         go build -ldflags "$ldflags" -o .\bin\Launcher.exe .\cmd\launcher\main.go
-        
-        Write-Host "Compiling DeployManager with version: $version" -ForegroundColor Cyan
         go build -ldflags "$ldflags" -o .\bin\DeployManager.exe .\cmd\deploymanager\main.go
       shell: powershell
 
-    # 5. Compile the installer package using Inno Setup
     - name: Compile Inno Setup Installer
       run: |
         $isccPath = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
         & $isccPath .\installer.iss
       shell: powershell
-
-    # 6 Security Scan Step
-    - name: Scan Installer with Virus Scanner
-      uses: hugoalh/scan-virus-ghaction@v0.20.0
-      with:
-        clamav_enable: True
-        yara_enable: True
-        # Only scan your specific installer file
-        ignores_pre: |-
-          Param($ElementPreMeta)
-          # Use -notlike with wildcards to be OS-agnostic
-          Return ($ElementPreMeta.Path -notlike '*bin*ErgonomicMouseSetup.exe')
       
-    # 7. Upload the finished installer as a temporary build artifact
-    - name: Upload Installer Artifact
-      uses: actions/upload-artifact@v7
+    - name: Upload Installer to Internal Workflow Storage
+      uses: actions/upload-artifact@v7 # Upgraded to v4 for better cross-runner performance
       with:
         name: ErgonomicMouseSetup-Latest
         path: .\bin\ErgonomicMouseSetup.exe
         if-no-files-found: error
-        retention-days: 7
+        retention-days: 1
 
-    # 8. Automatically publish a formal public release whenever a version tag triggers the run chain
-    - name: Create Production Release
-      if: steps.meta.outputs.is_release_tag == 'True'
+  # ==========================================
+  # STAGE 2: SECURITY SCAN (Linux)
+  # ==========================================
+  scan:
+    name: Security Scan
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download Unverified Artifact
+      uses: actions/download-artifact@v7
+      with:
+        name: ErgonomicMouseSetup-Latest
+        path: ./bin
+
+    - name: Scan Installer with ClamAV & YARA
+      uses: hugoalh/scan-virus-ghaction@v0.20.0
+      with:
+        clamav_enable: True
+        yara_enable: True
+        # Target the file precisely
+        ignores_pre: |-
+          Param($ElementPreMeta)
+          Return ($ElementPreMeta.Path -notlike '*bin/ErgonomicMouseSetup.exe')
+
+  # ==========================================
+  # STAGE 3: PUBLIC RELEASE (Linux)
+  # ==========================================
+  publish_release:
+    name: Create Production Release
+    needs: [build, scan] # The security gate: will not run if [scan] fails.
+    if: needs.build.outputs.is_release_tag == 'True'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Download Verified Artifact
+      uses: actions/download-artifact@v7
+      with:
+        name: ErgonomicMouseSetup-Latest
+        path: ./bin
+
+    - name: Publish GitHub Release
       uses: ncipollo/release-action@v1
       with:
-        artifacts: '.\bin\ErgonomicMouseSetup.exe'
+        artifacts: './bin/ErgonomicMouseSetup.exe'
         allowUpdates: true
         draft: false
         prerelease: false
-        tag: ${{ steps.meta.outputs.true_version }}
-        name: Release ${{ steps.meta.outputs.true_version }}
+        tag: ${{ needs.build.outputs.true_version }}
+        name: Release ${{ needs.build.outputs.true_version }}
+        # Automatically generates release notes from merged PRs
+        generateReleaseNotes: true
         body: |
-          Official compiled production release installer package for version ${{ steps.meta.outputs.true_version }}.
+          Official compiled, malware-scanned production release for version ${{ needs.build.outputs.true_version }}.
           
           **Commit Context Evaluation:** `${{ github.event.workflow_run.head_sha || github.sha }}`
           
