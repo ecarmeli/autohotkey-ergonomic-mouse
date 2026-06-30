@@ -135,14 +135,14 @@ Ensure you have Inno Setup 6+ installed locally, pull the AutoHotkey binaries in
 The project features an automated, multi-tier GitHub Actions delivery structure:
 
 ### 1. Security & Quality Pipeline (`security-and-quality.yml`)
-* Run on every pull request to protect code integrity.
+* Runs on every pull request to protect code integrity.
 * **Checks Include:** `go vet` static analysis, `staticcheck` advanced linter execution, `govulncheck` code vulnerability dependency tracking, and `trivy` scanning for secrets and repository configurations.
 
 ### 2. Build & Release Pipeline (`build-and-release.yml`)
-* Automatically spins up a virtual `windows-latest` runner on pushes to the main branch.
-* Dynamically downloads and stages stable AutoHotkey core dependency distributions.
-* Injects variables (`version`, `buildTime`, `gitCommit`) directly into the compiled Go assets.
-* Invokes `ISCC.exe` out-of-the-box to package and export a compiled `ErgonomicMouseSetup.exe` artifact.
+* Orchestrates an automated, 3-stage delivery pipeline split across isolated platforms for optimized execution and security gating:
+  * **Stage 1: Build & Package (Windows):** Spins up a virtual `windows-latest` runner on commits to `main`. It downloads and verifies the stable AutoHotkey core distribution via SHA256 hashes, injects runtime build metadata (`version`, `buildTime`, `gitCommit`) into the Go binaries via `ldflags`, compiles the executables, and packages them via Inno Setup (`ISCC.exe`). The unverified installer is then saved to secure workflow storage.
+  * **Stage 2: Independent Malware Scan (Linux):** Downloads the compiled installer into an isolated `ubuntu-latest` container environment. It executes a targeted anti-malware scan using the industry-standard **ClamAV** engine. If any signature vulnerabilities or threats are discovered, the step returns a fatal error, forcing a "fail-closed" termination of the entire run chain.
+  * **Stage 3: Conditional Production Release (Linux):** If and only if the malware scan passes cleanly, this final stage evaluates the triggering event context. If the run was initiated by an official version tag push, it pulls down the verified, scanned binary, auto-generates release notes from merged pull requests, and publishes a formal, public production release asset.
 
 ---
 
