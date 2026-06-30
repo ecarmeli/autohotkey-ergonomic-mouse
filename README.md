@@ -61,6 +61,17 @@ This solution is engineered to play nicely out of the box with core enterprise p
 
 ---
 
+## 📋 System Requirements
+
+* **Operating System:** Microsoft Windows 10 or Windows 11 (64-bit architecture required).
+* **Execution Privileges:** * *Standard User Mode:* Does **not** require local administrator rights (installs isolated to user profile space).
+  * *System-Wide Mode:* Local administrator privileges are required during setup to bind tasks directly to the elevated Task Scheduler engine.
+* **Dependencies:** None. The installer bundles the precise, verified AutoHotkey v2 core binary and compiled Go launcher modules out of the box.
+* **Hardware Interactivity:** Mappings take advantage of standard peripheral inputs. The Master Toggle relies on a physical `Scroll Lock` key layout; systems missing this physical key can trigger it via standard virtual keyboard overlays or alternate custom remappings.
+
+---
+
+
 ## 📂 Repository Structure
 
 ```text
@@ -136,10 +147,7 @@ The project features an automated, multi-tier GitHub Actions delivery structure:
 
 ## 🔄 Update Model (High-Level)
 
-* Launcher binary is responsible for execution flow
-* AutoHotkey script acts as runtime payload
-* Updates are fetched and validated before execution
-* Designed for:
-  * resilience
-  * silent operation
-  * zero user friction
+The application features a decoupled architecture designed for automated, zero-friction maintenance:
+* **Lifecycle Orchestration:** The compiled Go launcher binary acts as the primary execution wrapper, handling background state checks and background update loops.
+* **Runtime Payload:** The lightweight `ErgonomicMouse.ahk` script acts as the native hotkey payload, executed dynamically by the underlying verified AHK core engine.
+* **Secure Delivery:** Updates are fetched, cryptographically/structurally validated silently in the background, and seamlessly hot-swapped upon the next user logon to ensure a resilient, frictionless experience.
