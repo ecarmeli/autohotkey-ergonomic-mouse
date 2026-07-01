@@ -10,6 +10,30 @@ on:
 jobs:
 
   # ---------------------------------------------
+  # CHANGE DETECTION
+  # ---------------------------------------------
+  detect_changes:
+    name: Evaluate Path Changes
+    runs-on: ubuntu-latest
+    outputs:
+      trigger_allowed: ${{ steps.filter.outputs.src }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+        
+      - name: Check modified files
+        uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            src:
+              - 'cmd/**'
+              - 'src/**'
+              - 'go.mod'
+              - 'go.sum'
+              - 'installer.iss'
+
+  # ---------------------------------------------
   # GO BUILD + LINT + FORMAT VALIDATION
   # ---------------------------------------------
   go_quality:
@@ -116,12 +140,18 @@ jobs:
   # --------------------------------------------------------------------
   # Trigger the installer build directly within the same runtime context
   # --------------------------------------------------------------------
-
   trigger_build:
     name: Execute Production Build
-    needs: [go_quality, go_security, repository_security_scan]
-    if: github.event_name == 'push'
-    # Grant the reusable workflow permission to create releases
+    needs: [detect_changes, go_quality, go_security, repository_security_scan]
+    
+    # Execute only IF:
+    # 1. It is a push event
+    # And -
+    # 2. It is either a Git Tag or the path filter detected application related changes.
+    if: |
+      github.event_name == 'push' && 
+      (github.ref_type == 'tag' || needs.detect_changes.outputs.trigger_allowed == 'true')
+      
     permissions:
       contents: write
     uses: ./.github/workflows/build-and-release.yml
