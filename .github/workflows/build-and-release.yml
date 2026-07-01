@@ -111,7 +111,7 @@ jobs:
         path: ./bin
 
     - name: Scan Installer with ClamAV & YARA
-      uses: hugoalh/scan-virus-ghaction@v0.20.0
+      uses: hugoalh/scan-virus-ghaction@v0.20.1
       with:
         clamav_enable: True
         yara_enable: True
