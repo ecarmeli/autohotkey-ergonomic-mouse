@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"io"
@@ -15,19 +17,15 @@ import (
 )
 
 var (
-	version   = "dev"
-	buildTime = "unknown"
-	gitCommit = "none"
+	version              = "dev"
+	buildTime            = "unknown"
+	gitCommit            = "none"
+	remoteScriptURL      = ""
+	expectedScriptSHA256 = ""
 )
 
 // =========================================================================
-// 1. Constants
-// =========================================================================
-
-const remoteURL = "https://raw.githubusercontent.com/ecarmeli/autohotkey-ergonomic-mouse/main/src/ErgonomicMouse.ahk"
-
-// =========================================================================
-// 2. Configuration Struct
+// 1. Configuration Struct
 // =========================================================================
 
 type Config struct {
@@ -68,7 +66,7 @@ func buildConfig() (*Config, error) {
 }
 
 // =========================================================================
-// 3. Helper Functions
+// 2. Helper Functions
 // =========================================================================
 
 func fileExists(filename string) bool {
@@ -77,6 +75,30 @@ func fileExists(filename string) bool {
 		return false // Safely handle permission denials or missing files without panicking
 	}
 	return !info.IsDir()
+}
+
+func readLimitedBody(r io.Reader, maxSize int64) ([]byte, error) {
+	bodyBytes, err := io.ReadAll(io.LimitReader(r, maxSize+1))
+	if err != nil {
+		return nil, err
+	}
+
+	if int64(len(bodyBytes)) > maxSize {
+		return nil, fmt.Errorf("downloaded content exceeds maximum allowed size of %d bytes", maxSize)
+	}
+
+	return bodyBytes, nil
+}
+
+func verifySHA256(data []byte, expectedHash string) error {
+	sum := sha256.Sum256(data)
+	actualHash := hex.EncodeToString(sum[:])
+
+	if !strings.EqualFold(actualHash, expectedHash) {
+		return fmt.Errorf("SHA256 mismatch: expected %s, got %s", expectedHash, actualHash)
+	}
+
+	return nil
 }
 
 func rotateLogs(logFile string) {
@@ -124,7 +146,7 @@ func logToFile(logPath string, format string, args ...any) {
 }
 
 // =========================================================================
-// 4. Execution Code
+// 3. Execution Code
 // =========================================================================
 
 func main() {
@@ -153,12 +175,18 @@ func main() {
 	}
 
 	// -------------------------------------------------------------------------
-	// Context-Aware HTTP Request (ETag Logic)
+	// Context-Aware HTTP Request
 	// -------------------------------------------------------------------------
+	if strings.TrimSpace(remoteScriptURL) == "" || strings.TrimSpace(expectedScriptSHA256) == "" {
+		logToFile(cfg.LogFile, "WARNING: Update metadata missing. Skipping remote update.")
+		launchAHK(cfg)
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", remoteURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", remoteScriptURL, nil)
 	if err != nil {
 		logToFile(cfg.LogFile, "WARNING: Failed to build request: %v", err)
 		launchAHK(cfg)
@@ -212,11 +240,19 @@ func main() {
 			return
 		}
 
-		// Security: Prevent memory exhaustion by capping download at 5MB
-		const maxScriptSize = 5 * 1024 * 1024
-		bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxScriptSize))
+		// Security: Prevent memory exhaustion and reject oversized downloads.
+		const maxScriptSize int64 = 5 * 1024 * 1024
+
+		bodyBytes, err := readLimitedBody(resp.Body, maxScriptSize)
 		if err != nil {
-			logToFile(cfg.LogFile, "WARNING: Failed to read downloaded content: %v", err)
+			logToFile(cfg.LogFile, "WARNING: Failed to read downloaded content safely: %v", err)
+			launchAHK(cfg)
+			return
+		}
+
+		// Security: Verify the downloaded script is exactly the expected build-pinned artifact.
+		if err := verifySHA256(bodyBytes, expectedScriptSHA256); err != nil {
+			logToFile(cfg.LogFile, "WARNING: Downloaded script failed SHA256 verification: %v", err)
 			launchAHK(cfg)
 			return
 		}
