@@ -140,25 +140,40 @@ var
   iResultCode: Integer;
 begin
   Result := True;
+
+  // --- ELEVATED USER-MODE BLOCK ---
+  // If the process is elevated, but the user requested a User-mode install, block it.
+  // Windows cannot de-elevate the process, so this would install to the Admin profile.
+  if IsAdminLoggedOn() and not IsAdminInstallMode() then
+  begin
+    MsgBox(
+      'You have launched the installer as an Administrator, but selected a "Current User" installation.' + #13#10#13#10 +
+      'This will install the application into the Administrator account''s profile rather than your own personal profile.' + #13#10#13#10 +
+      'To install for your standard user account, please close this setup and launch it normally (do not use "Run as administrator").',
+      mbError, MB_OK
+    );
+    Result := False;
+    Exit;
+  end;
+  // --------------------------------
+
   ExistingMode := GetInstalledMode();
   sUnInstallString := GetUninstallString();
 
   // --- FALLBACK PROTECTION ---
   if ExistingMode = InstallModeNone then
   begin
-    // If we find no registry keys, but the installer is running elevated, check for hidden profiles
-    if IsAdminInstallMode() then
+    // If the registry is empty, but we physically find an installation in ANY user profile,
+    // the user context has shifted (usually due to manual elevation).
+    if CheckForOtherUserInstalls() then
     begin
-      if CheckForOtherUserInstalls() then
-      begin
-        MsgBox(
-          'A per-user installation was found under another Windows user profile.' + #13#10#13#10 +
-          'This usually happens when the installer is manually launched using "Run as administrator", which hides the original user''s registry data.' + #13#10#13#10 +
-          'To avoid creating a duplicate system-wide installation, Setup will now exit. Please close this window and launch the installer normally.',
-          mbError, MB_OK
-        );
-        Result := False;
-      end;
+      MsgBox(
+        'A per-user installation was found under another Windows user profile.' + #13#10#13#10 +
+        'This usually happens when the installer is manually launched using "Run as administrator", which changes the active user context.' + #13#10#13#10 +
+        'To avoid creating a duplicate or orphaned installation, Setup will now exit. Please close this window and launch the installer normally (do not use "Run as administrator").',
+        mbError, MB_OK
+      );
+      Result := False;
     end;
     Exit;
   end;
@@ -215,5 +230,25 @@ begin
   begin
     ForceDirectories(GetInstallDir('') + '\logs');
     CopyFile(ExpandConstant('{log}'), GetInstallDir('') + '\logs\install.log', False);
+  end;
+end;
+
+// Dynamically update the installer window title without breaking UAC focus
+procedure CurPageChanged(CurPageID: Integer);
+var
+  NewCaption: String;
+begin
+  if IsAdminInstallMode() then
+    NewCaption := 'Setup - Ergonomic Mouse Keys (All Users)'
+  else
+    NewCaption := 'Setup - Ergonomic Mouse Keys (Current User)';
+
+  // Only redraw the window title if it hasn't been updated yet
+  if WizardForm.Caption <> NewCaption then
+  begin
+    WizardForm.Caption := NewCaption;
+    // Changing the caption causes a VCL redraw that can drop the window behind 
+    // others during the UAC handoff. This native call forces it back to the top.
+    WizardForm.BringToFront;
   end;
 end;

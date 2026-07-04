@@ -22,7 +22,9 @@ This project packages everything into a unified Windows installer executable (`E
 The installation wizard dynamically adapts its execution layer based on user privilege:
 
 * **User Mode (Standard Privilege):** Installs strictly within `%LocalAppData%\ErgonomicMouse` and registers interactive logon tasks. Ideal for restricted corporate environments without administrative rights.
-* **System Mode (Elevated Privilege):** * **System Mode (Elevated Privilege):** Installs globally to `%ProgramData%\ErgonomicMouse` and registers a Task Scheduler logon task intended to support interaction with elevated applications. The system installation directory is hardened so standard users receive read/execute access only to runtime files. Launcher.exe logs are written to the interactive user's `%LocalAppData%\ErgonomicMouse\logs`.
+* **System Mode (Elevated Privilege):** Installs globally to `%ProgramData%\ErgonomicMouse` and registers a Task Scheduler logon task intended to support interaction with elevated applications. The system installation directory is hardened so standard users receive read/execute access only to runtime files.
+
+**Cross-Scope Protection:** The installer enforces strict execution contexts. To prevent orphaned deployments, it will explicitly block the installation if launched manually as an Administrator but configured for a "Current User" deployment. It also actively scans for existing user-mode installations across profiles to prevent split-brain duplications when elevating.
 
 ### Security Model
 
@@ -31,10 +33,11 @@ The project separates runtime files from user-writable operational data.
 * In **User Mode**, all files are installed under the current user's `%LocalAppData%\ErgonomicMouse` profile path.
 * In **System Mode**, runtime files are installed under `%ProgramData%\ErgonomicMouse`. This directory is hardened so standard users receive read/execute access only. This helps prevent standard users from modifying program files.
 
-Operational launcher logs are not written to the protected system installation directory. They are written to the interactive user's local profile at:
+Operational logs (for both the execution engine and the deployment manager) are not written to the protected system installation directory. They are written to the interactive user's local profile at:
 
 ```text
 %LocalAppData%\ErgonomicMouse\logs\launcher.log
+%LocalAppData%\ErgonomicMouse\logs\deploymanager.log
 ```
 ---
 
@@ -171,11 +174,13 @@ Ergonomic Mouse Keys does not silently download or replace runtime files during 
 Updates are delivered through the full `ErgonomicMouseSetup.exe` installer so all components stay version-aligned, including:
 
 - `Launcher.exe`
+- `DeployManager.exe`
 - `ErgonomicMouse.ahk`
 - bundled AutoHotkey runtime files
 
-Launcher logs are written to:
+Operational logs are routed to the user's profile:
 
 ```text
 %LocalAppData%\ErgonomicMouse\logs\launcher.log
+%LocalAppData%\ErgonomicMouse\logs\deploymanager.log
 ```
