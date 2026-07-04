@@ -36,6 +36,7 @@ const (
 
 type Config struct {
 	Mode         string
+	LogFile      string
 	TargetDir    string
 	AHKDir       string
 	AHKExe       string
@@ -105,6 +106,14 @@ func buildConfig(mode string) (*Config, error) {
 	cfg.AHKExe = filepath.Join(cfg.AHKDir, "AutoHotkey64.exe")
 	cfg.ScriptDest = filepath.Join(cfg.TargetDir, "ErgonomicMouse.ahk")
 	cfg.LauncherDest = filepath.Join(cfg.TargetDir, "Launcher.exe")
+
+	// Ensure logs are written to the correct user or system profile
+	if cfg.Mode == "user" {
+		localAppData := os.Getenv("LOCALAPPDATA")
+		cfg.LogFile = filepath.Join(localAppData, "ErgonomicMouse", "logs", "deploymanager.log")
+	} else {
+		cfg.LogFile = filepath.Join(cfg.TargetDir, "logs", "deploymanager.log")
+	}
 
 	return cfg, nil
 }
@@ -538,6 +547,15 @@ func main() {
 	cfg, err := buildConfig(*mode)
 	if err != nil {
 		log.Fatalf("Fatal: Failed to build configuration: %v", err)
+	}
+
+	// Ensure the logs directory exists
+	if err := os.MkdirAll(filepath.Dir(cfg.LogFile), 0755); err == nil {
+		// Open or create the log file, appending to it if it exists
+		if f, err := os.OpenFile(cfg.LogFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+			log.SetOutput(f)
+			defer f.Close()
+		}
 	}
 
 	// Dynamic Privilege Enforcement

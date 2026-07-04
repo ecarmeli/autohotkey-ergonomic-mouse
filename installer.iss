@@ -96,6 +96,42 @@ begin
     Exit;
 end;
 
+// Helper to scan all local Windows profiles for an existing user-mode installation
+function CheckForOtherUserInstalls(): Boolean;
+var
+  FindRec: TFindRec;
+  UsersDir: String;
+  TargetExe: String;
+begin
+  Result := False;
+  // {sd} resolves to the System Drive (usually C:)
+  UsersDir := ExpandConstant('{sd}\Users\');
+
+  if FindFirst(UsersDir + '*', FindRec) then
+  begin
+    try
+      repeat
+        // Skip the current '.' and parent '..' directory pointers
+        if (FindRec.Name <> '.') and (FindRec.Name <> '..') then
+        begin
+          // Ensure the current item is actually a directory (Attribute 16)
+          if (FindRec.Attributes and 16) <> 0 then
+          begin
+            TargetExe := UsersDir + FindRec.Name + '\AppData\Local\ErgonomicMouse\unins000.exe';
+            if FileExists(TargetExe) then
+            begin
+              Result := True;
+              Break;
+            end;
+          end;
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
 function InitializeSetup(): Boolean;
 var
   V: Integer;
@@ -104,10 +140,44 @@ var
   iResultCode: Integer;
 begin
   Result := True;
+
+  // --- ELEVATED USER-MODE BLOCK ---
+  // If the process is elevated, but the user requested a User-mode install, block it.
+  // Windows cannot de-elevate the process, so this would install to the Admin profile.
+  if IsAdminLoggedOn() and not IsAdminInstallMode() then
+  begin
+    MsgBox(
+      'You have launched the installer as an Administrator, but selected a "Current User" installation.' + #13#10#13#10 +
+      'This will install the application into the Administrator account''s profile rather than your own personal profile.' + #13#10#13#10 +
+      'To install for your standard user account, please close this setup and launch it normally (do not use "Run as administrator").',
+      mbError, MB_OK
+    );
+    Result := False;
+    Exit;
+  end;
+  // --------------------------------
+
   ExistingMode := GetInstalledMode();
   sUnInstallString := GetUninstallString();
 
-  if ExistingMode = InstallModeNone then Exit;
+  // --- FALLBACK PROTECTION ---
+  if ExistingMode = InstallModeNone then
+  begin
+    // If the registry is empty, but we physically find an installation in ANY user profile,
+    // the user context has shifted (usually due to manual elevation).
+    if CheckForOtherUserInstalls() then
+    begin
+      MsgBox(
+        'A per-user installation was found under another Windows user profile.' + #13#10#13#10 +
+        'This usually happens when the installer is manually launched using "Run as administrator", which changes the active user context.' + #13#10#13#10 +
+        'To avoid creating a duplicate or orphaned installation, Setup will now exit. Please close this window and launch the installer normally (do not use "Run as administrator").',
+        mbError, MB_OK
+      );
+      Result := False;
+    end;
+    Exit;
+  end;
+  // -------------------------------
 
   V := MsgBox(
     'Ergonomic Mouse Keys is already installed.' + #13#10 + #13#10 +
@@ -133,7 +203,7 @@ begin
       Exit;
     end;
   end;
-end; 
+end;
 
 function GetInstallDir(Param: String): String;
 begin
@@ -160,5 +230,25 @@ begin
   begin
     ForceDirectories(GetInstallDir('') + '\logs');
     CopyFile(ExpandConstant('{log}'), GetInstallDir('') + '\logs\install.log', False);
+  end;
+end;
+
+// Dynamically update the installer window title without breaking UAC focus
+procedure CurPageChanged(CurPageID: Integer);
+var
+  NewCaption: String;
+begin
+  if IsAdminInstallMode() then
+    NewCaption := 'Setup - Ergonomic Mouse Keys (All Users)'
+  else
+    NewCaption := 'Setup - Ergonomic Mouse Keys (Current User)';
+
+  // Only redraw the window title if it hasn't been updated yet
+  if WizardForm.Caption <> NewCaption then
+  begin
+    WizardForm.Caption := NewCaption;
+    // Changing the caption causes a VCL redraw that can drop the window behind 
+    // others during the UAC handoff. This native call forces it back to the top.
+    WizardForm.BringToFront;
   end;
 end;
