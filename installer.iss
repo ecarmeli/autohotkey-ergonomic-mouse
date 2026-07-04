@@ -96,6 +96,42 @@ begin
     Exit;
 end;
 
+// Helper to scan all local Windows profiles for an existing user-mode installation
+function CheckForOtherUserInstalls(): Boolean;
+var
+  FindRec: TFindRec;
+  UsersDir: String;
+  TargetExe: String;
+begin
+  Result := False;
+  // {sd} resolves to the System Drive (usually C:)
+  UsersDir := ExpandConstant('{sd}\Users\');
+
+  if FindFirst(UsersDir + '*', FindRec) then
+  begin
+    try
+      repeat
+        // Skip the current '.' and parent '..' directory pointers
+        if (FindRec.Name <> '.') and (FindRec.Name <> '..') then
+        begin
+          // Ensure the current item is actually a directory (Attribute 16)
+          if (FindRec.Attributes and 16) <> 0 then
+          begin
+            TargetExe := UsersDir + FindRec.Name + '\AppData\Local\ErgonomicMouse\unins000.exe';
+            if FileExists(TargetExe) then
+            begin
+              Result := True;
+              Break;
+            end;
+          end;
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
+end;
+
 function InitializeSetup(): Boolean;
 var
   V: Integer;
@@ -107,7 +143,26 @@ begin
   ExistingMode := GetInstalledMode();
   sUnInstallString := GetUninstallString();
 
-  if ExistingMode = InstallModeNone then Exit;
+  // --- FALLBACK PROTECTION ---
+  if ExistingMode = InstallModeNone then
+  begin
+    // If we find no registry keys, but the installer is running elevated, check for hidden profiles
+    if IsAdminInstallMode() then
+    begin
+      if CheckForOtherUserInstalls() then
+      begin
+        MsgBox(
+          'A per-user installation was found under another Windows user profile.' + #13#10#13#10 +
+          'This usually happens when the installer is manually launched using "Run as administrator", which hides the original user''s registry data.' + #13#10#13#10 +
+          'To avoid creating a duplicate system-wide installation, Setup will now exit. Please close this window and launch the installer normally.',
+          mbError, MB_OK
+        );
+        Result := False;
+      end;
+    end;
+    Exit;
+  end;
+  // -------------------------------
 
   V := MsgBox(
     'Ergonomic Mouse Keys is already installed.' + #13#10 + #13#10 +
@@ -133,7 +188,7 @@ begin
       Exit;
     end;
   end;
-end; 
+end;
 
 function GetInstallDir(Param: String): String;
 begin
