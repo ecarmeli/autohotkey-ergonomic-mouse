@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -193,7 +194,9 @@ func registerTaskWithCOM(cfg *Config) error {
 		return err
 	}
 	regInfo := regInfoProg.ToIDispatch()
-	putCOMProperty(regInfo, "Description", cfg.Description)
+	if err := putCOMProperty(regInfo, "Description", cfg.Description); err != nil {
+		return fmt.Errorf("failed to set Description: %w", err)
+	}
 	regInfo.Release()
 
 	principalProg, err := oleutil.GetProperty(taskDefinition, "Principal")
@@ -203,11 +206,19 @@ func registerTaskWithCOM(cfg *Config) error {
 	principal := principalProg.ToIDispatch()
 
 	if cfg.IsSystem {
-		putCOMProperty(principal, "GroupId", "Builtin\\Users")
-		putCOMProperty(principal, "RunLevel", TaskRunLevelHighest)
+		if err := putCOMProperty(principal, "GroupId", "Builtin\\Users"); err != nil {
+			return fmt.Errorf("failed to set GroupId: %w", err)
+		}
+		if err := putCOMProperty(principal, "RunLevel", TaskRunLevelHighest); err != nil {
+			return fmt.Errorf("failed to set RunLevel: %w", err)
+		}
 	} else {
-		putCOMProperty(principal, "UserId", cfg.UserContext)
-		putCOMProperty(principal, "LogonType", TaskLogonInteractive)
+		if err := putCOMProperty(principal, "UserId", cfg.UserContext); err != nil {
+			return fmt.Errorf("failed to set UserId: %w", err)
+		}
+		if err := putCOMProperty(principal, "LogonType", TaskLogonInteractive); err != nil {
+			return fmt.Errorf("failed to set LogonType: %w", err)
+		}
 	}
 	principal.Release()
 
@@ -216,9 +227,15 @@ func registerTaskWithCOM(cfg *Config) error {
 		return err
 	}
 	settings := settingsProg.ToIDispatch()
-	putCOMProperty(settings, "DisallowStartIfOnBatteries", false)
-	putCOMProperty(settings, "StopIfGoingOnBatteries", false)
-	putCOMProperty(settings, "ExecutionTimeLimit", "PT0S")
+	if err := putCOMProperty(settings, "DisallowStartIfOnBatteries", false); err != nil {
+		return fmt.Errorf("failed to set DisallowStartIfOnBatteries: %w", err)
+	}
+	if err := putCOMProperty(settings, "StopIfGoingOnBatteries", false); err != nil {
+		return fmt.Errorf("failed to set StopIfGoingOnBatteries: %w", err)
+	}
+	if err := putCOMProperty(settings, "ExecutionTimeLimit", "PT0S"); err != nil {
+		return fmt.Errorf("failed to set ExecutionTimeLimit: %w", err)
+	}
 	settings.Release()
 
 	triggersProg, err := oleutil.GetProperty(taskDefinition, "Triggers")
@@ -235,7 +252,9 @@ func registerTaskWithCOM(cfg *Config) error {
 	trigger := triggerProg.ToIDispatch()
 
 	if !cfg.IsSystem {
-		putCOMProperty(trigger, "UserId", cfg.UserContext)
+		if err := putCOMProperty(trigger, "UserId", cfg.UserContext); err != nil {
+			return fmt.Errorf("failed to set Trigger UserId: %w", err)
+		}
 	}
 	trigger.Release()
 	triggers.Release()
@@ -253,8 +272,12 @@ func registerTaskWithCOM(cfg *Config) error {
 	}
 	action := actionNewProg.ToIDispatch()
 
-	putCOMProperty(action, "Path", cfg.LauncherDest)
-	putCOMProperty(action, "Arguments", cfg.LauncherArgs)
+	if err := putCOMProperty(action, "Path", cfg.LauncherDest); err != nil {
+		return fmt.Errorf("failed to set Action Path: %w", err)
+	}
+	if err := putCOMProperty(action, "Arguments", cfg.LauncherArgs); err != nil {
+		return fmt.Errorf("failed to set Action Arguments: %w", err)
+	}
 	action.Release()
 	actions.Release()
 
@@ -374,7 +397,11 @@ func checkWMIForProcess(scriptPath string) bool {
 		process := variant.ToIDispatch()
 		cmdLineProg, err := oleutil.GetProperty(process, "CommandLine")
 		if err == nil {
-			if strings.Contains(cmdLineProg.ToString(), scriptPath) {
+			// Normalize paths to lowercase and clean up slashes to ensure accurate matching
+			normalizedCmdLine := strings.ToLower(filepath.Clean(cmdLineProg.ToString()))
+			normalizedScriptPath := strings.ToLower(filepath.Clean(scriptPath))
+
+			if strings.Contains(normalizedCmdLine, normalizedScriptPath) {
 				process.Release()
 				variant.Clear()
 				return true
@@ -459,7 +486,10 @@ func terminateSpecificAHKScript(scriptPath string) (int, error) {
 		process := variant.ToIDispatch()
 		cmdLineProg, err := oleutil.GetProperty(process, "CommandLine")
 		if err == nil {
-			if strings.Contains(cmdLineProg.ToString(), scriptPath) {
+			normalizedCmdLine := strings.ToLower(filepath.Clean(cmdLineProg.ToString()))
+			normalizedScriptPath := strings.ToLower(filepath.Clean(scriptPath))
+
+			if strings.Contains(normalizedCmdLine, normalizedScriptPath) {
 				if _, err := oleutil.CallMethod(process, "Terminate"); err == nil {
 					terminatedCount++
 				}
@@ -470,6 +500,33 @@ func terminateSpecificAHKScript(scriptPath string) (int, error) {
 	}
 
 	return terminatedCount, nil
+}
+
+func hardenDirectoryACLs(dir string) error {
+	// SIDs used for universal compatibility across Windows languages:
+	// *S-1-5-32-544 = Builtin Administrators
+	// *S-1-5-18     = Local System
+	// *S-1-5-32-545 = Builtin Users
+
+	// /inheritance:r   -> Removes inherited permissions (breaks the chain from %ProgramData%)
+	// /grant:r         -> Replaces explicit permissions
+	// (OI)(CI)(F)      -> Object Inherit, Container Inherit, Full Control
+	// (OI)(CI)(RX)     -> Object Inherit, Container Inherit, Read and Execute
+
+	cmd := exec.Command("icacls", dir,
+		"/inheritance:r",
+		"/grant:r", "*S-1-5-32-544:(OI)(CI)(F)",
+		"/grant:r", "*S-1-5-18:(OI)(CI)(F)",
+		"/grant:r", "*S-1-5-32-545:(OI)(CI)(RX)",
+	)
+
+	// Hide the command window if this runs interactively
+	cmd.SysProcAttr = &windows.SysProcAttr{HideWindow: true}
+
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("icacls failed: %v, output: %s", err, string(output))
+	}
+	return nil
 }
 
 func main() {
@@ -511,19 +568,20 @@ func main() {
 		// Terminate stale background layers safely
 		_, _ = terminateSpecificAHKScript(cfg.ScriptDest)
 
+		// Harden the target directory if deploying in System mode
+		if cfg.IsSystem {
+			log.Printf("Hardening system ACLs on target directory: %s", cfg.TargetDir)
+			if err := hardenDirectoryACLs(cfg.TargetDir); err != nil {
+				log.Fatalf("Deployment Engine Panic: Failed to secure directory permissions: %v", err)
+			}
+		}
+
 		log.Printf("Registering native COM task scheduler endpoint: %s", cfg.TaskName)
 		if err := registerTaskWithCOM(cfg); err != nil {
 			log.Fatalf("Deployment Engine Panic: COM registry allocation fault: %v", err)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-
-		if verifyAHKRunning(ctx, cfg.ScriptDest) {
-			log.Printf("Verification Success: Remapping container actively listening.")
-		} else {
-			log.Printf("Warning: Application initiated, context verification timed out.")
-		}
+		log.Printf("Task registration complete. The task will be initiated by the installer.")
 		return
 	}
 

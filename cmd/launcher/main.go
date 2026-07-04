@@ -2,30 +2,34 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
 
 var (
-	version              = "dev"
-	buildTime            = "unknown"
-	gitCommit            = "none"
-	remoteScriptURL      = ""
-	expectedScriptSHA256 = ""
+	version   = "dev"
+	buildTime = "unknown"
+	gitCommit = "none"
 )
 
 // =========================================================================
-// 1. Configuration Struct
+// 1. Constants
+// =========================================================================
+
+// GitHub API URL for checking the latest published release
+const releasesAPI = "https://api.github.com/repos/ecarmeli/autohotkey-ergonomic-mouse/releases/latest"
+
+// =========================================================================
+// 2. Configuration Struct
 // =========================================================================
 
 type Config struct {
@@ -56,17 +60,26 @@ func buildConfig() (*Config, error) {
 	// 2. The TargetDir is simply the folder containing Launcher.exe
 	cfg.TargetDir = filepath.Dir(exePath)
 
-	// 3. Map all internal assets relative to that exact directory
+	// 3. Map runtime assets relative to the installation directory
 	cfg.AHKExe = filepath.Join(cfg.TargetDir, "AutoHotkey", "AutoHotkey64.exe")
 	cfg.AHKScriptPath = filepath.Join(cfg.TargetDir, "ErgonomicMouse.ahk")
 	cfg.ETagFile = cfg.AHKScriptPath + ".etag"
-	cfg.LogFile = filepath.Join(cfg.TargetDir, "logs", "launcher.log")
+
+	// 4. Store logs outside the installation/program directory.
+	// In system mode, the launcher runs from ProgramData, but logs should
+	// belong to the interactive user's LocalAppData profile.
+	localAppData := os.Getenv("LOCALAPPDATA")
+	if localAppData != "" {
+		cfg.LogFile = filepath.Join(localAppData, "ErgonomicMouse", "logs", "launcher.log")
+	} else {
+		cfg.LogFile = filepath.Join(cfg.TargetDir, "logs", "launcher.log")
+	}
 
 	return cfg, nil
 }
 
 // =========================================================================
-// 2. Helper Functions
+// 3. Helper Functions
 // =========================================================================
 
 func fileExists(filename string) bool {
@@ -75,30 +88,6 @@ func fileExists(filename string) bool {
 		return false // Safely handle permission denials or missing files without panicking
 	}
 	return !info.IsDir()
-}
-
-func readLimitedBody(r io.Reader, maxSize int64) ([]byte, error) {
-	bodyBytes, err := io.ReadAll(io.LimitReader(r, maxSize+1))
-	if err != nil {
-		return nil, err
-	}
-
-	if int64(len(bodyBytes)) > maxSize {
-		return nil, fmt.Errorf("downloaded content exceeds maximum allowed size of %d bytes", maxSize)
-	}
-
-	return bodyBytes, nil
-}
-
-func verifySHA256(data []byte, expectedHash string) error {
-	sum := sha256.Sum256(data)
-	actualHash := hex.EncodeToString(sum[:])
-
-	if !strings.EqualFold(actualHash, expectedHash) {
-		return fmt.Errorf("SHA256 mismatch: expected %s, got %s", expectedHash, actualHash)
-	}
-
-	return nil
 }
 
 func rotateLogs(logFile string) {
@@ -145,8 +134,58 @@ func logToFile(logPath string, format string, args ...any) {
 	f.WriteString(fmt.Sprintf("%s - %s\n", ts, msg))
 }
 
+func normalizeVersion(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.TrimPrefix(value, "v")
+	value = strings.TrimPrefix(value, "V")
+	return value
+}
+
+func parseVersion(value string) ([3]int, error) {
+	var result [3]int
+
+	normalized := normalizeVersion(value)
+	parts := strings.Split(normalized, ".")
+	if len(parts) != 3 {
+		return result, fmt.Errorf("unsupported version format: %s", value)
+	}
+
+	for i, part := range parts {
+		number, err := strconv.Atoi(part)
+		if err != nil {
+			return result, fmt.Errorf("invalid version component %q in %s: %w", part, value, err)
+		}
+		result[i] = number
+	}
+
+	return result, nil
+}
+
+func isNewerVersion(latest string, current string) (bool, error) {
+	latestVersion, err := parseVersion(latest)
+	if err != nil {
+		return false, err
+	}
+
+	currentVersion, err := parseVersion(current)
+	if err != nil {
+		return false, err
+	}
+
+	for i := 0; i < 3; i++ {
+		if latestVersion[i] > currentVersion[i] {
+			return true, nil
+		}
+		if latestVersion[i] < currentVersion[i] {
+			return false, nil
+		}
+	}
+
+	return false, nil
+}
+
 // =========================================================================
-// 3. Execution Code
+// 4. Execution Code
 // =========================================================================
 
 func main() {
@@ -175,131 +214,72 @@ func main() {
 	}
 
 	// -------------------------------------------------------------------------
-	// Context-Aware HTTP Request
+	// Check for Updates (Notification Only)
 	// -------------------------------------------------------------------------
-	if strings.TrimSpace(remoteScriptURL) == "" || strings.TrimSpace(expectedScriptSHA256) == "" {
-		logToFile(cfg.LogFile, "WARNING: Update metadata missing. Skipping remote update.")
-		launchAHK(cfg)
-		return
-	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	// Skip the version check if this is a local development build
+	if version != "dev" {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", remoteScriptURL, nil)
-	if err != nil {
-		logToFile(cfg.LogFile, "WARNING: Failed to build request: %v", err)
-		launchAHK(cfg)
-		return
-	}
-
-	if fileExists(cfg.AHKScriptPath) && fileExists(cfg.ETagFile) {
-		localETag, err := os.ReadFile(cfg.ETagFile)
-		if err == nil && len(strings.TrimSpace(string(localETag))) > 0 {
-			req.Header.Set("If-None-Match", strings.TrimSpace(string(localETag)))
-		}
-	}
-
-	// Enforce hard timeout to prevent socket hangs
-	client := &http.Client{Timeout: 15 * time.Second}
-
-	var resp *http.Response
-	var doErr error
-
-	// Quick retry logic for minor network blips
-	for i := 0; i < 2; i++ {
-		resp, doErr = client.Do(req)
-		if doErr == nil {
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-
-	if doErr != nil {
-		logToFile(cfg.LogFile, "WARNING: Silent update network failure after retries: %v", doErr)
-		launchAHK(cfg)
-		return
-	}
-	defer resp.Body.Close()
-
-	// -------------------------------------------------------------------------
-	// Handle the Response Safely
-	// -------------------------------------------------------------------------
-	if resp.StatusCode == http.StatusNotModified { // 304 - No changes
-		logToFile(cfg.LogFile, "INFO: Script up to date (304).")
-		launchAHK(cfg)
-		return
-	}
-
-	if resp.StatusCode == http.StatusOK { // 200 - New file found
-		// Lightweight integrity check
-		contentType := resp.Header.Get("Content-Type")
-		if !strings.Contains(contentType, "text") && !strings.Contains(contentType, "plain") {
-			logToFile(cfg.LogFile, "WARNING: Unexpected content-type: %s. Aborting update.", contentType)
-			launchAHK(cfg)
-			return
-		}
-
-		// Security: Prevent memory exhaustion and reject oversized downloads.
-		const maxScriptSize int64 = 5 * 1024 * 1024
-
-		bodyBytes, err := readLimitedBody(resp.Body, maxScriptSize)
+		req, err := http.NewRequestWithContext(ctx, "GET", releasesAPI, nil)
 		if err != nil {
-			logToFile(cfg.LogFile, "WARNING: Failed to read downloaded content safely: %v", err)
-			launchAHK(cfg)
-			return
-		}
+			logToFile(cfg.LogFile, "INFO: Failed to build update check request: %v", err)
+		} else {
+			req.Header.Set("Accept", "application/vnd.github.v3+json")
+			req.Header.Set("User-Agent", "ErgonomicMouseKeys/"+version)
 
-		// Security: Verify the downloaded script is exactly the expected build-pinned artifact.
-		if err := verifySHA256(bodyBytes, expectedScriptSHA256); err != nil {
-			logToFile(cfg.LogFile, "WARNING: Downloaded script failed SHA256 verification: %v", err)
-			launchAHK(cfg)
-			return
-		}
-
-		bodyString := string(bodyBytes)
-
-		// Hardened Script Validation
-		if len(bodyBytes) < 100 ||
-			!strings.Contains(strings.ToLower(bodyString), "#requires autohotkey") ||
-			!strings.Contains(bodyString, "::") {
-			logToFile(cfg.LogFile, "WARNING: Downloaded file failed rigorous validation checks. Aborting update.")
-			launchAHK(cfg)
-			return
-		}
-
-		// Hardened Atomic File Replacement
-		tmpScriptPath := cfg.AHKScriptPath + ".tmp"
-		if err := os.WriteFile(tmpScriptPath, bodyBytes, 0644); err != nil {
-			logToFile(cfg.LogFile, "WARNING: Failed to write temp script file: %v", err)
-			launchAHK(cfg)
-			return
-		}
-
-		if err := os.Rename(tmpScriptPath, cfg.AHKScriptPath); err != nil {
-			logToFile(cfg.LogFile, "WARNING: Failed to atomically replace script file: %v", err)
-			os.Remove(tmpScriptPath) // Clean up orphan temp file
-			launchAHK(cfg)
-			return
-		}
-
-		remoteETag := resp.Header.Get("ETag")
-		if remoteETag != "" {
-			tmpEtagPath := cfg.ETagFile + ".tmp"
-			if err := os.WriteFile(tmpEtagPath, []byte(remoteETag), 0644); err != nil {
-				logToFile(cfg.LogFile, "WARNING: Failed to write temp ETag file: %v", err)
+			client := &http.Client{Timeout: 5 * time.Second}
+			resp, err := client.Do(req)
+			if err != nil {
+				logToFile(cfg.LogFile, "INFO: Update check failed: %v", err)
 			} else {
-				if err := os.Rename(tmpEtagPath, cfg.ETagFile); err != nil {
-					logToFile(cfg.LogFile, "WARNING: Failed to atomically save ETag file: %v", err)
+				defer resp.Body.Close()
+
+				if resp.StatusCode == http.StatusOK {
+					var release struct {
+						TagName string `json:"tag_name"`
+						HTMLURL string `json:"html_url"`
+						Assets  []struct {
+							Name               string `json:"name"`
+							BrowserDownloadURL string `json:"browser_download_url"`
+						} `json:"assets"`
+					}
+
+					if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+						logToFile(cfg.LogFile, "INFO: Failed to parse update check response: %v", err)
+					} else {
+						updateAvailable, err := isNewerVersion(release.TagName, version)
+						if err != nil {
+							logToFile(cfg.LogFile, "INFO: Unable to compare versions. current=%s latest=%s error=%v", version, release.TagName, err)
+						} else if updateAvailable {
+							var directDownloadURL string
+							for _, asset := range release.Assets {
+								if asset.Name == "ErgonomicMouseSetup.exe" {
+									directDownloadURL = asset.BrowserDownloadURL
+									break
+								}
+							}
+
+							logToFile(cfg.LogFile, "INFO: Update available. current=%s latest=%s", version, release.TagName)
+							logToFile(cfg.LogFile, "INFO: Release page: %s", release.HTMLURL)
+
+							if directDownloadURL != "" {
+								logToFile(cfg.LogFile, "INFO: Direct installer download: %s", directDownloadURL)
+							}
+						} else {
+							if normalizeVersion(release.TagName) == normalizeVersion(version) {
+								logToFile(cfg.LogFile, "INFO: Running the latest published version (%s).", version)
+							} else {
+								logToFile(cfg.LogFile, "INFO: No newer release found. current=%s latest=%s", version, release.TagName)
+							}
+						}
+					}
+				} else {
+					logToFile(cfg.LogFile, "INFO: Update check returned HTTP status: %d", resp.StatusCode)
 				}
 			}
-		} else {
-			logToFile(cfg.LogFile, "INFO: No ETag returned by the remote server.")
 		}
-
-		logToFile(cfg.LogFile, "SUCCESS: Local script updated. ETag: %s", remoteETag)
-	} else {
-		logToFile(cfg.LogFile, "WARNING: Unexpected HTTP status: %d", resp.StatusCode)
 	}
 
 	// -------------------------------------------------------------------------
