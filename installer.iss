@@ -144,7 +144,7 @@ begin
   // --- ELEVATED USER-MODE BLOCK ---
   // If the process is elevated, but the user requested a User-mode install, block it.
   // Windows cannot de-elevate the process, so this would install to the Admin profile.
-  if IsAdminLoggedOn() and not IsAdminInstallMode() then
+  if IsAdmin() and not IsAdminInstallMode() then
   begin
     MsgBox(
       'You have launched the installer as an Administrator, but selected a "Current User" installation.' + #13#10#13#10 +
@@ -195,10 +195,18 @@ begin
 
   if sUnInstallString <> '' then
   begin
-    // User consented. Run the uninstaller completely hidden so it doesn't steal focus or create a taskbar icon.
+    // User consented. Run the uninstaller completely hidden.
     if not Exec('>', sUnInstallString + ' /VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, iResultCode) then
     begin
-      MsgBox('Uninstallation failed: ' + SysErrorMessage(iResultCode), mbError, MB_OK);
+      MsgBox('Uninstallation failed to launch. Error code: ' + IntToStr(iResultCode), mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+    
+    // Catch UAC cancellation or execution failure from the uninstaller stub
+    if iResultCode <> 0 then
+    begin
+      MsgBox('Uninstallation was cancelled or did not complete successfully. Setup will now exit.', mbError, MB_OK);
       Result := False;
       Exit;
     end;
