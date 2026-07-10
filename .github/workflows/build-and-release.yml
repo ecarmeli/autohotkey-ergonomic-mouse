@@ -20,7 +20,7 @@ jobs:
     name: Build and Package Installer
     runs-on: windows-latest
     permissions:
-      contents: write
+      contents: read
     # We must expose these variables to the downstream jobs
     outputs:
       is_release_tag: ${{ steps.meta.outputs.is_release_tag }}
@@ -28,7 +28,7 @@ jobs:
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v7
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 #v7
       with:
         ref: ${{ github.event.workflow_run.head_sha || github.sha }}
         fetch-depth: 0
@@ -89,10 +89,10 @@ jobs:
       shell: powershell
       
     - name: Upload Installer to Internal Workflow Storage
-      uses: actions/upload-artifact@v7 # Upgraded to v4 for better cross-runner performance
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
       with:
-        name: ErgonomicMouseSetup-Latest
-        path: .\bin\ErgonomicMouseSetup.exe
+        name: ErgonomicMouse-Binaries
+        path: .\bin\*.exe
         if-no-files-found: error
         retention-days: 1
 
@@ -105,20 +105,38 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Download Unverified Artifact
-      uses: actions/download-artifact@v8
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
       with:
-        name: ErgonomicMouseSetup-Latest
+        name: ErgonomicMouse-Binaries
         path: ./bin
 
     - name: Scan Installer with ClamAV & YARA
-      uses: hugoalh/scan-virus-ghaction@v0.20.1
+      uses: hugoalh/scan-virus-ghaction@99c81e8991ad1074a14e5f22a21bce9be035e14e # v0.20.1
       with:
         clamav_enable: True
         yara_enable: True
-        # Target the file precisely
+        # Target the files precisely
         ignores_pre: |-
           Param($ElementPreMeta)
-          Return ($ElementPreMeta.Path -notlike '*bin/ErgonomicMouseSetup.exe')
+          Return ($ElementPreMeta.Path -notlike '*bin/*.exe')
+
+    - name: Run Capa Behavioral Analysis
+      run: |
+        # Download and extract the Capa standalone binary
+        VER=9.4.0
+        wget https://github.com/mandiant/capa/releases/download/v$VER/capa-v$VER-linux.zip
+        unzip capa-v$VER-linux.zip -d capa-bin
+        chmod +x capa-bin/capa
+        
+        # Scan each binary for behavioral capabilities
+        echo "Scanning Launcher.exe..."
+        ./capa-bin/capa ./bin/Launcher.exe
+        
+        echo "Scanning DeployManager.exe..."
+        ./capa-bin/capa ./bin/DeployManager.exe
+        
+        echo "Scanning ErgonomicMouseSetup.exe..."
+        ./capa-bin/capa ./bin/ErgonomicMouseSetup.exe
 
   # ==========================================
   # STAGE 3: PUBLIC RELEASE (Linux)
@@ -132,13 +150,13 @@ jobs:
       contents: write
     steps:
     - name: Download Verified Artifact
-      uses: actions/download-artifact@v8
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
       with:
-        name: ErgonomicMouseSetup-Latest
+        name: ErgonomicMouse-Binaries
         path: ./bin
 
     - name: Publish GitHub Release
-      uses: ncipollo/release-action@v1
+      uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1.21.0
       with:
         artifacts: './bin/ErgonomicMouseSetup.exe'
         allowUpdates: true
@@ -149,10 +167,19 @@ jobs:
         # Automatically generates release notes from merged PRs
         generateReleaseNotes: true
         body: |
-          Official compiled, malware-scanned production release for version ${{ needs.build.outputs.true_version }}.
+          Welcome to version ${{ needs.build.outputs.true_version }}! 🎉
           
-          **Commit Context Evaluation:** `${{ github.event.workflow_run.head_sha || github.sha }}`
+          This release was automatically compiled, packaged, and subjected to a strict malware scan (ClamAV/YARA/Capa) via our CI/CD pipeline.
+          
+          *(Build Context: `${{ github.event.workflow_run.head_sha || github.sha }}`)*
           
           ### 📦 Installation
-          1. Download the raw `ErgonomicMouseSetup.exe` asset below.
-          2. Execute the package to launch the deployment wizard interface.
+          1. Download `ErgonomicMouseSetup.exe` below.
+          2. Double-click to launch the installer.
+          
+          ### 🛡️ Note on Windows SmartScreen
+          Because this is a free, open-source project, the installer is not signed with a commercial Authenticode certificate. When you run it, you may see a blue "Windows protected your PC" screen. 
+          
+          To proceed with the installation:
+          1. Click **More info**.
+          2. Click **Run anyway**.
