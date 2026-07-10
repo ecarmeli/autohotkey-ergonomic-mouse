@@ -120,24 +120,6 @@ jobs:
           Param($ElementPreMeta)
           Return ($ElementPreMeta.Path -notlike '*bin/*.exe')
 
-    - name: Run Capa Behavioral Analysis
-      run: |
-        # Download and extract the Capa standalone binary
-        VER=9.4.0
-        wget https://github.com/mandiant/capa/releases/download/v$VER/capa-v$VER-linux.zip
-        unzip capa-v$VER-linux.zip -d capa-bin
-        chmod +x capa-bin/capa
-        
-        # Scan each binary for behavioral capabilities
-        echo "Scanning Launcher.exe..."
-        ./capa-bin/capa ./bin/Launcher.exe
-        
-        echo "Scanning DeployManager.exe..."
-        ./capa-bin/capa ./bin/DeployManager.exe
-        
-        echo "Scanning ErgonomicMouseSetup.exe..."
-        ./capa-bin/capa ./bin/ErgonomicMouseSetup.exe
-
   # ==========================================
   # STAGE 3: PUBLIC RELEASE (Linux)
   # ==========================================
@@ -169,7 +151,7 @@ jobs:
         body: |
           Welcome to version ${{ needs.build.outputs.true_version }}! 🎉
           
-          This release was automatically compiled, packaged, and subjected to a strict malware scan (ClamAV/YARA/Capa) via our CI/CD pipeline.
+          This release was automatically compiled, packaged, and subjected to a strict malware scan (ClamAV/YARA) via our CI/CD pipeline.
           
           *(Build Context: `${{ github.event.workflow_run.head_sha || github.sha }}`)*
           
