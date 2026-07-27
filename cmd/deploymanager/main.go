@@ -3,7 +3,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -11,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 	"unsafe"
 
 	"github.com/go-ole/go-ole"
@@ -149,14 +147,6 @@ func isAdmin() bool {
 	}
 
 	return elevation != 0
-}
-
-func fileExists(filename string) bool {
-	info, err := os.Stat(filename)
-	if err != nil {
-		return false
-	}
-	return !info.IsDir()
 }
 
 func registerTaskWithCOM(cfg *Config) error {
@@ -350,94 +340,6 @@ func putCOMProperty(dispatch *ole.IDispatch, name string, value interface{}) err
 	return nil
 }
 
-func checkWMIForProcess(scriptPath string) bool {
-	if err := ole.CoInitialize(0); err != nil {
-		return false
-	}
-	defer ole.CoUninitialize()
-
-	unknown, err := oleutil.CreateObject("WbemScripting.SWbemLocator")
-	if err != nil {
-		return false
-	}
-	defer unknown.Release()
-
-	wmiUnknown, err := unknown.QueryInterface(ole.IID_IDispatch)
-	if err != nil {
-		return false
-	}
-	defer wmiUnknown.Release()
-
-	serviceProg, err := oleutil.CallMethod(wmiUnknown, "ConnectServer", nil, "ROOT\\CIMV2")
-	if err != nil {
-		return false
-	}
-	service := serviceProg.ToIDispatch()
-	defer service.Release()
-
-	query := "SELECT CommandLine FROM Win32_Process WHERE Name = 'AutoHotkey64.exe'"
-	resultProg, err := oleutil.CallMethod(service, "ExecQuery", query)
-	if err != nil {
-		return false
-	}
-	results := resultProg.ToIDispatch()
-	defer results.Release()
-
-	enum, err := results.GetProperty("_NewEnum")
-	if err != nil {
-		return false
-	}
-	defer enum.Clear()
-
-	ienumUnknown, err := enum.ToIUnknown().QueryInterface(ole.IID_IEnumVariant)
-	if err != nil {
-		return false
-	}
-
-	ienum := (*ole.IEnumVARIANT)(ienumUnknown)
-	defer ienum.Release()
-
-	for {
-		variant, fetched, err := ienum.Next(1)
-		if err != nil || fetched == 0 {
-			break
-		}
-
-		process := variant.ToIDispatch()
-		cmdLineProg, err := oleutil.GetProperty(process, "CommandLine")
-		if err == nil {
-			// Normalize paths to lowercase and clean up slashes to ensure accurate matching
-			normalizedCmdLine := strings.ToLower(filepath.Clean(cmdLineProg.ToString()))
-			normalizedScriptPath := strings.ToLower(filepath.Clean(scriptPath))
-
-			if strings.Contains(normalizedCmdLine, normalizedScriptPath) {
-				process.Release()
-				variant.Clear()
-				return true
-			}
-		}
-		process.Release()
-		variant.Clear()
-	}
-	return false
-}
-
-func verifyAHKRunning(ctx context.Context, scriptPath string) bool {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return false
-		case <-ticker.C:
-			if checkWMIForProcess(scriptPath) {
-				return true
-			}
-		}
-	}
-}
-
 func terminateSpecificAHKScript(scriptPath string) (int, error) {
 	if err := ole.CoInitialize(0); err != nil {
 		return 0, err
@@ -563,7 +465,15 @@ func main() {
 		log.Fatalf("Elevation Required: Please relaunch installer inside Administrative context or select User Mode.")
 	}
 
-	log.Printf("DeployManager v%s | Mode: %s | Action: install=%t, uninstall=%t", version, cfg.Mode, *installAction, *uninstallAction)
+	log.Printf(
+		"DeployManager v%s | Build: %s | Commit: %s | Mode: %s | Action: install=%t, uninstall=%t",
+		version,
+		buildTime,
+		gitCommit,
+		cfg.Mode,
+		*installAction,
+		*uninstallAction,
+	)
 
 	// --- ACTION: PRE-UNINSTALL CLEANUP ---
 	if *uninstallAction {

@@ -1,5 +1,8 @@
 name: Code Quality and Security Analysis
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [ main ]                  # Run on every push to main branch
@@ -20,6 +23,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
         
       - name: Check modified files
         uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
@@ -42,7 +47,9 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7    
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
 
       - name: Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0       
@@ -69,10 +76,7 @@ jobs:
           fi
 
       - name: Run staticcheck
-        run: |
-          # Install advanced static analysis tool
-          go install honnef.co/go/tools/cmd/staticcheck@latest
-          staticcheck ./...         # Run deeper linting checks
+        run: go tool staticcheck ./...
 
       - name: Build Windows binaries (Dry Run)
         run: |
@@ -91,18 +95,20 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 #v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
 
       - name: Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: '1.26.5'
 
+      - name: Verify Go Modules
+        run: go mod verify
+
       - name: Run govulncheck
-        run: |
-          # Install official Go vulnerability scanner
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...         # Scan for known vulnerabilities in dependencies
+        run: go tool govulncheck ./...
 
 
   # ---------------------------------------------
@@ -114,10 +120,12 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 #v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
 
       - name: Run Trivy Vulnerability Scanner
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 #v0.36.0 
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: 'fs'                         # Scan filesystem (entire repo)
           scan-ref: '.'                           # Start from repo root
@@ -161,4 +169,3 @@ jobs:
     with:
       is_tag: ${{ github.ref_type == 'tag' && 'True' || 'False' }}
       tag_name: ${{ github.ref_name }}
-    secrets: inherit
