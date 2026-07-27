@@ -1,7 +1,16 @@
+#ifndef AppVersion
+  #define AppVersion "0.0.0-dev"
+#endif
+
+#ifndef AppNumericVersion
+  #define AppNumericVersion "0.0.0.0"
+#endif
+
 [Setup]
 AppId={{E8C2B3C5-9A1A-4D7E-8F4C-9C2B3D4E5F6A}
 AppName=Ergonomic Mouse Keys
-AppVersion=1.0.0
+AppVersion={#AppVersion}
+VersionInfoVersion={#AppNumericVersion}
 AppPublisher=Erez Carmeli
 DefaultDirName={code:GetInstallDir}
 DefaultGroupName=Ergonomic Mouse Keys
