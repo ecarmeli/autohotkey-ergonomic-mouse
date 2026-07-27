@@ -40,20 +40,29 @@ jobs:
     - name: Parse Git Reference Metadata
       id: meta
       run: |
-        $trueRef = "${{ inputs.tag_name }}"
+        # Extract inputs from workflow_call
+        $releaseTag = "${{ inputs.tag_name }}"
         $isTag = "${{ inputs.is_tag }}"
-        
-        if ($trueRef -notmatch '^[a-zA-Z0-9.\-\/]+$') {
-            Write-Error "CRITICAL SECURITY FAULT: Malformed tag_name payload detected. Execution halted."
+
+        # Validate that the build is triggered by a tag
+        if ($isTag -ne "True") {
+            Write-Error "CRITICAL SECURITY FAULT: Production builds require a release tag."
             exit 1
         }
-        if ($isTag -ne "True" -and $isTag -ne "False") {
-            Write-Error "CRITICAL SECURITY FAULT: Invalid boolean input '$isTag' for is_tag."
+
+        # Validate the tag format (e.g., v1.2.3)
+        if ($releaseTag -notmatch '^v(\d+\.\d+\.\d+)$') {
+            Write-Error "CRITICAL SECURITY FAULT: Release tag '$releaseTag' must use the format vMAJOR.MINOR.PATCH."
             exit 1
         }
-            
-        echo "true_version=$trueRef" >> $env:GITHUB_OUTPUT
-        echo "is_release_tag=$isTag" >> $env:GITHUB_OUTPUT
+
+        # Extract the semantic version from the tag
+        $appVersion = $Matches[1]
+
+        # Export outputs for downstream jobs
+        echo "true_version=$releaseTag" >> $env:GITHUB_OUTPUT
+        echo "app_version=$appVersion" >> $env:GITHUB_OUTPUT
+        echo "is_release_tag=True" >> $env:GITHUB_OUTPUT
       shell: powershell
 
     - name: Download and Verify AutoHotkey Core
@@ -75,23 +84,39 @@ jobs:
 
     - name: Compile Go Binaries
       run: |
-        $version = "1.0.0"
-        if ("${{ steps.meta.outputs.is_release_tag }}" -eq "True") { $version = "${{ steps.meta.outputs.true_version }}" }
-        
+        $version = "${{ steps.meta.outputs.app_version }}"
         $buildTime = Get-Date -Format "yyyy-MM-dd_HH:mm:ss"
         $commit = git rev-parse --short HEAD
         $ldflags = "-s -w -H=windowsgui -X main.version=$version -X main.gitCommit=$commit -X main.buildTime=$buildTime"
-        
+
         go build -ldflags "$ldflags" -o .\bin\Launcher.exe .\cmd\launcher\main.go
+        if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+        }
+
         go build -ldflags "$ldflags" -o .\bin\DeployManager.exe .\cmd\deploymanager\main.go
+        if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+        }
       shell: powershell
 
     - name: Compile Inno Setup Installer
       run: |
         $isccPath = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
-        & $isccPath .\installer.iss
+        $appVersion = "${{ steps.meta.outputs.app_version }}"
+        $numericVersion = "$appVersion.0"
+
+        $appVersionDefine = "/DAppVersion=$appVersion"
+        $numericVersionDefine = "/DAppNumericVersion=$numericVersion"
+
+        & $isccPath $appVersionDefine $numericVersionDefine .\installer.iss
+
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Inno Setup compilation failed with exit code $LASTEXITCODE."
+            exit $LASTEXITCODE
+        }
       shell: powershell
-      
+
     - name: Upload Installer to Internal Workflow Storage
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
       with:
