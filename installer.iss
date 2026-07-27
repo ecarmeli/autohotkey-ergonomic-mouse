@@ -45,7 +45,6 @@ Filename: "{code:GetInstallDir}\DeployManager.exe"; Parameters: "--mode=user --u
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{code:GetInstallDir}\logs"
-Type: files; Name: "{code:GetInstallDir}\*.etag"
 Type: files; Name: "{code:GetInstallDir}\*.tmp"
 Type: dirifempty; Name: "{code:GetInstallDir}"
 
