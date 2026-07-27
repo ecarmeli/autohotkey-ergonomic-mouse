@@ -39,8 +39,7 @@ Filename: "{code:GetInstallDir}\DeployManager.exe"; Parameters: "--mode=user --i
 Filename: "schtasks"; Parameters: "/Run /TN ""{code:GetTaskName}"""; Flags: runhidden postinstall skipifsilent runascurrentuser; Description: "Start Ergonomic Mouse Keys"
 
 [UninstallRun]
-; Kill active processes to prevent file-lock "Access Denied" errors during uninstallation
-Filename: "{cmd}"; Parameters: "/C taskkill /F /IM AutoHotkey64.exe /IM Launcher.exe"; Flags: runhidden; RunOnceId: "KillEngineProcesses"
+; Delegate targeted task and process cleanup to DeployManager.
 Filename: "{code:GetInstallDir}\DeployManager.exe"; Parameters: "--mode=system --uninstall"; Flags: runhidden; RunOnceId: "TeardownSystem"; Check: IsAdminInstallMode
 Filename: "{code:GetInstallDir}\DeployManager.exe"; Parameters: "--mode=user --uninstall"; Flags: runhidden; RunOnceId: "TeardownUser"; Check: not IsAdminInstallMode
 
