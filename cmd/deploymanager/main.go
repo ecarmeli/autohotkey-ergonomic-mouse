@@ -478,14 +478,20 @@ func main() {
 	// --- ACTION: PRE-UNINSTALL CLEANUP ---
 	if *uninstallAction {
 		log.Println("Action triggered: Cleaning system configurations...")
+
+		// Remove the scheduled task first so it cannot restart the runtime during cleanup.
+		if err := deleteTaskWithCOM(cfg); err != nil {
+			log.Printf("Notice: Task Scheduler unregistration bypass: %v", err)
+		}
+
 		terminatedCount, err := terminateSpecificAHKScript(cfg.ScriptDest)
-		if err == nil && terminatedCount > 0 {
+		if err != nil {
+			log.Printf("Notice: Targeted runtime termination failed: %v", err)
+		} else if terminatedCount > 0 {
 			log.Printf("Surgically terminated %d active engine runtime process(es).", terminatedCount)
 		}
-		if err := deleteTaskWithCOM(cfg); err != nil {
-			log.Printf("Notice: Task Schedule unregistration bypass: %v", err)
-		}
-		log.Println("Cleanup tasks finalized successfully.")
+
+		log.Println("Cleanup tasks finalized.")
 		return
 	}
 
