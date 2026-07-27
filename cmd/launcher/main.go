@@ -36,7 +36,6 @@ type Config struct {
 	Mode          string
 	TargetDir     string
 	AHKScriptPath string
-	ETagFile      string
 	AHKExe        string
 	LogFile       string
 }
@@ -63,7 +62,6 @@ func buildConfig() (*Config, error) {
 	// 3. Map runtime assets relative to the installation directory
 	cfg.AHKExe = filepath.Join(cfg.TargetDir, "AutoHotkey", "AutoHotkey64.exe")
 	cfg.AHKScriptPath = filepath.Join(cfg.TargetDir, "ErgonomicMouse.ahk")
-	cfg.ETagFile = cfg.AHKScriptPath + ".etag"
 
 	// 4. Store logs outside the installation/program directory.
 	// In system mode, the launcher runs from ProgramData, but logs should
