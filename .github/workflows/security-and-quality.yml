@@ -13,32 +13,6 @@ on:
 jobs:
 
   # ---------------------------------------------
-  # CHANGE DETECTION
-  # ---------------------------------------------
-  detect_changes:
-    name: Evaluate Path Changes
-    runs-on: ubuntu-latest
-    outputs:
-      trigger_allowed: ${{ steps.filter.outputs.src }}
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-        
-      - name: Check modified files
-        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
-        id: filter
-        with:
-          filters: |
-            src:
-              - 'cmd/**'
-              - 'src/**'
-              - 'go.mod'
-              - 'go.sum'
-              - 'installer.iss'
-
-  # ---------------------------------------------
   # GO BUILD + LINT + FORMAT VALIDATION
   # ---------------------------------------------
   go_quality:
@@ -149,23 +123,16 @@ jobs:
 
 
   # --------------------------------------------------------------------
-  # Trigger the installer build directly within the same runtime context
+  # Build, scan, and publish production artifacts only for release tags
   # --------------------------------------------------------------------
   trigger_build:
     name: Execute Production Build
-    needs: [detect_changes, go_quality, go_security, repository_security_scan]
-    
-    # Execute only IF:
-    # 1. It is a push event
-    # And -
-    # 2. It is either a Git Tag or the path filter detected application related changes.
-    if: |
-      github.event_name == 'push' && 
-      (github.ref_type == 'tag' || needs.detect_changes.outputs.trigger_allowed == 'true')
-      
+    needs: [go_quality, go_security, repository_security_scan]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+
     permissions:
       contents: write
     uses: ./.github/workflows/build-and-release.yml
     with:
-      is_tag: ${{ github.ref_type == 'tag' && 'True' || 'False' }}
+      is_tag: 'True'
       tag_name: ${{ github.ref_name }}
