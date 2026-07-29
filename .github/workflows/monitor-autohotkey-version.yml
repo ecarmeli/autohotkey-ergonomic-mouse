@@ -31,29 +31,27 @@ jobs:
           $buildWorkflowPath = ".github/workflows/build-and-release.yml"
           $buildWorkflow = Get-Content $buildWorkflowPath -Raw
 
-          $pinnedMatch = :Match(
-              $buildWorkflow,
-              'releases/download/v(\d+\.\d+\.\d+)/AutoHotkey_(\d+\.\d+\.\d+)\.zip'
-          )  
-          if (-not $pinnedMatch.Success) {
+          $versionPattern = 'releases/download/v(\d+\.\d+\.\d+)/AutoHotkey_(\d+\.\d+\.\d+)\.zip'
+
+          if ($buildWorkflow -notmatch $versionPattern) {
               Write-Error "Unable to determine the pinned AutoHotkey version from $buildWorkflowPath."
               exit 1
-          }  
-          $urlVersion = $pinnedMatch.Groups[1].Value
-          $assetVersion = $pinnedMatch.Groups[2].Value  
+          }
+
+          $urlVersion = $Matches[1]
+          $assetVersion = $Matches[2]
+
           if ($urlVersion -ne $assetVersion) {
               Write-Error "AutoHotkey version mismatch: release URL uses $urlVersion but the ZIP filename uses $assetVersion."
               exit 1
-          }  
+          }
+
           $pinnedSemanticVersion = [version]$urlVersion
-          $pinnedVersion = "v$urlVersion"  
-          $releaseLinePattern = '^v{0}\.{1}\.\d+$' -f `
-              $pinnedSemanticVersion.Major, `
-              $pinnedSemanticVersion.Minor  
-          Write-Host "Pinned AutoHotkey version: $pinnedVersion"
-          Write-Host "Monitored stable release line: $($pinnedSemanticVersion.Major).$($pinnedSemanticVersion.Minor).x"
+          $pinnedVersion = "v$urlVersion"
+          $releaseLinePattern = "^v$($pinnedSemanticVersion.Major)\.$($pinnedSemanticVersion.Minor)\.\d+$"
 
           Write-Host "Pinned AutoHotkey version: $pinnedVersion"
+          Write-Host "Monitored stable release line: $($pinnedSemanticVersion.Major).$($pinnedSemanticVersion.Minor).x"
 
           $releases = gh api `
               "repos/AutoHotkey/AutoHotkey/releases?per_page=100" |
@@ -65,17 +63,6 @@ jobs:
                   -not $_.prerelease -and
                   $_.tag_name -match $releaseLinePattern
               }
-
-          $pinnedRelease = $stableReleases |
-              Where-Object {
-                  $_.tag_name -eq $pinnedVersion
-              } |
-              Select-Object -First 1
-
-          if (-not $pinnedRelease) {
-              Write-Error "Pinned release $pinnedVersion was not found in the upstream release history."
-              exit 1
-          }
 
           $securityPattern = '(?i)\bsecurity\b|\bvulnerabilit(?:y|ies)\b|\bCVE-\d{4}-\d+\b|privilege escalation|arbitrary code|remote code execution|code injection|process injection|memory corruption'
 
@@ -102,21 +89,15 @@ jobs:
               Write-Warning "Unable to query GitHub Security Advisories: $($_.Exception.Message)"
           }
 
-          $relevantAdvisories = $advisories |
-              Where-Object {
-                  $_.published_at -and
-                  [datetime]$_.published_at -gt [datetime]$pinnedRelease.published_at
-              }
-
           $securityReleaseCount = @($securityReleases).Count
-          $advisoryCount = @($relevantAdvisories).Count
+          $advisoryCount = @($advisories).Count
 
           @"
           ## AutoHotkey Security Monitor
 
           - Pinned runtime: ``$pinnedVersion``
           - Newer releases with explicit security signals: $securityReleaseCount
-          - Security advisories published after the pinned release: $advisoryCount
+          - Published AutoHotkey security advisories: $advisoryCount
           "@ | Add-Content $env:GITHUB_STEP_SUMMARY
 
           if ($securityReleaseCount -eq 0 -and $advisoryCount -eq 0) {
@@ -161,7 +142,7 @@ jobs:
           }
 
           $advisoryDetails = if ($advisoryCount -gt 0) {
-              ($relevantAdvisories | ForEach-Object {
+              ($advisories | ForEach-Object {
                   "- $($_.ghsa_id): $($_.html_url)"
               }) -join "`n"
           }
