@@ -1,0 +1,211 @@
+name: Monitor AutoHotkey Security Updates
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  monitor:
+    name: Check AutoHotkey Security Signals
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check Releases and Security Advisories
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $buildWorkflowPath = ".github/workflows/build-and-release.yml"
+          $buildWorkflow = Get-Content $buildWorkflowPath -Raw
+
+          $pinnedMatch = :Match(
+              $buildWorkflow,
+              'releases/download/v(\d+\.\d+\.\d+)/AutoHotkey_(\d+\.\d+\.\d+)\.zip'
+          )  
+          if (-not $pinnedMatch.Success) {
+              Write-Error "Unable to determine the pinned AutoHotkey version from $buildWorkflowPath."
+              exit 1
+          }  
+          $urlVersion = $pinnedMatch.Groups[1].Value
+          $assetVersion = $pinnedMatch.Groups[2].Value  
+          if ($urlVersion -ne $assetVersion) {
+              Write-Error "AutoHotkey version mismatch: release URL uses $urlVersion but the ZIP filename uses $assetVersion."
+              exit 1
+          }  
+          $pinnedSemanticVersion = [version]$urlVersion
+          $pinnedVersion = "v$urlVersion"  
+          $releaseLinePattern = '^v{0}\.{1}\.\d+$' -f `
+              $pinnedSemanticVersion.Major, `
+              $pinnedSemanticVersion.Minor  
+          Write-Host "Pinned AutoHotkey version: $pinnedVersion"
+          Write-Host "Monitored stable release line: $($pinnedSemanticVersion.Major).$($pinnedSemanticVersion.Minor).x"
+
+          Write-Host "Pinned AutoHotkey version: $pinnedVersion"
+
+          $releases = gh api `
+              "repos/AutoHotkey/AutoHotkey/releases?per_page=100" |
+              ConvertFrom-Json
+
+          $stableReleases = $releases |
+              Where-Object {
+                  -not $_.draft -and
+                  -not $_.prerelease -and
+                  $_.tag_name -match $releaseLinePattern
+              }
+
+          $pinnedRelease = $stableReleases |
+              Where-Object {
+                  $_.tag_name -eq $pinnedVersion
+              } |
+              Select-Object -First 1
+
+          if (-not $pinnedRelease) {
+              Write-Error "Pinned release $pinnedVersion was not found in the upstream release history."
+              exit 1
+          }
+
+          $securityPattern = '(?i)\bsecurity\b|\bvulnerabilit(?:y|ies)\b|\bCVE-\d{4}-\d+\b|privilege escalation|arbitrary code|remote code execution|code injection|process injection|memory corruption'
+
+          $securityReleases = $stableReleases |
+              Where-Object {
+                  [version]$_.tag_name.TrimStart("v") -gt $pinnedSemanticVersion -and
+                  (
+                      $_.name -match $securityPattern -or
+                      $_.body -match $securityPattern
+                  )
+              } |
+              Sort-Object {
+                  [version]$_.tag_name.TrimStart("v")
+              } -Descending
+
+          $advisories = @()
+
+          try {
+              $advisories = gh api `
+                  "repos/AutoHotkey/AutoHotkey/security-advisories?state=published&per_page=100" |
+                  ConvertFrom-Json
+          }
+          catch {
+              Write-Warning "Unable to query GitHub Security Advisories: $($_.Exception.Message)"
+          }
+
+          $relevantAdvisories = $advisories |
+              Where-Object {
+                  $_.published_at -and
+                  [datetime]$_.published_at -gt [datetime]$pinnedRelease.published_at
+              }
+
+          $securityReleaseCount = @($securityReleases).Count
+          $advisoryCount = @($relevantAdvisories).Count
+
+          @"
+          ## AutoHotkey Security Monitor
+
+          - Pinned runtime: ``$pinnedVersion``
+          - Newer releases with explicit security signals: $securityReleaseCount
+          - Security advisories published after the pinned release: $advisoryCount
+          "@ | Add-Content $env:GITHUB_STEP_SUMMARY
+
+          if ($securityReleaseCount -eq 0 -and $advisoryCount -eq 0) {
+              Write-Host "No explicit AutoHotkey security update signal was detected."
+
+              "No security-related action is currently required." |
+                  Add-Content $env:GITHUB_STEP_SUMMARY
+
+              exit 0
+          }
+
+          $issueTitle = "Review AutoHotkey runtime security update"
+
+          $existingIssues = gh issue list `
+              --state open `
+              --limit 100 `
+              --json number,title |
+              ConvertFrom-Json
+
+          $existingIssue = $existingIssues |
+              Where-Object {
+                  $_.title -eq $issueTitle
+              } |
+              Select-Object -First 1
+
+          if ($existingIssue) {
+              Write-Host "An open tracking issue already exists: #$($existingIssue.number)"
+
+              "Open tracking issue already exists: #$($existingIssue.number)." |
+                  Add-Content $env:GITHUB_STEP_SUMMARY
+
+              exit 0
+          }
+
+          $releaseDetails = if ($securityReleaseCount -gt 0) {
+              ($securityReleases | ForEach-Object {
+                  "- $($_.tag_name): $($_.html_url)"
+              }) -join "`n"
+          }
+          else {
+              "- None detected"
+          }
+
+          $advisoryDetails = if ($advisoryCount -gt 0) {
+              ($relevantAdvisories | ForEach-Object {
+                  "- $($_.ghsa_id): $($_.html_url)"
+              }) -join "`n"
+          }
+          else {
+              "- None detected"
+          }
+
+          $issueBody = @"
+          ## AutoHotkey Security Signal Detected
+
+          The automated monitor found an explicit security-related signal affecting AutoHotkey maintenance.
+
+          Currently pinned runtime: ``$pinnedVersion``
+
+          ### Security-Related Releases
+
+          $releaseDetails
+
+          ### Published Security Advisories
+
+          $advisoryDetails
+
+          ## Required Review
+
+          - Review the upstream release notes or security advisory.
+          - Determine whether the bundled AutoHotkey runtime is affected.
+          - Confirm that the candidate release is a stable v2.0 release.
+          - Obtain the official SHA-256 digest for the ZIP asset.
+          - Update the download URL and expected digest atomically.
+          - Build and test the complete installer.
+          - Validate F5, F6, and F7 click, hold, drag, and release behavior.
+          - Confirm that the complete build output passes ClamAV and YARA scanning.
+          - Publish the update through a new application release if required.
+
+          This issue was created automatically. A security signal requires manual assessment and does not by itself confirm that the pinned runtime is vulnerable.
+          "@
+
+          $issueBody |
+              Set-Content `
+                  -Path "autohotkey-security-review.md" `
+                  -Encoding utf8
+
+          gh issue create `
+              --title $issueTitle `
+              --body-file "autohotkey-security-review.md" `
+              --label "security" `
+              --label "dependencies"
