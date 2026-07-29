@@ -30,11 +30,6 @@ NudgeMouseRightLeft() {
     MouseMove(-nudgePixels, 0, 0, "R")
 }
 
-; --- Hold-state flags (prevent key auto-repeat while key is held) ---
-leftHeld   := false
-middleHeld := false
-rightHeld  := false
-
 ; -----------------------------------------------------------------
 ;  SCROLL LOCK MASTER TOGGLE  (Enable/Disable all mappings)
 ;   - Scroll Lock ON  -> mappings enabled
@@ -68,54 +63,33 @@ ApplyScrollLockState()
 ;  MAPPINGS (active only when not Suspended)
 ; -----------------------------------------------------------------
 
-; F5 = Left button (press=Down, release=Up) with anti-repeat + micro-nudge on first Down
+; F5 = Left button
 F5:: {
-    global leftHeld
-    if leftHeld
-        return
-    Click("D")                 ; left-button down
-    leftHeld := true
-    NudgeMouseRightLeft()      ; help some apps detect drag/selection immediately
-}
-F5 Up:: {
-    global leftHeld
-    if leftHeld {
-        Click("U")             ; left-button up
-        leftHeld := false
-    }
-}
-
-; F6 = Middle button (press=Down, release=Up) with anti-repeat (for pan/hand-scroll hold)
-F6:: {
-    global middleHeld
-    if middleHeld
-        return
-    Click("middle", "D")       ; hold to pan/hand-scroll
-    middleHeld := true
-}
-F6 Up:: {
-    global middleHeld
-    if middleHeld {
-        Click("middle", "U")
-        middleHeld := false
-    }
-}
-
-; F7 = Right button (press=Down, release=Up) with anti-repeat + micro-nudge on first Down
-F7:: {
-    global rightHeld
-    if rightHeld
-        return
-    Click("right", "D")
-    rightHeld := true
+    Click("D")
     NudgeMouseRightLeft()
 }
+
+F5 Up:: {
+    Click("U")
+}
+
+; F6 = Middle button
+F6:: {
+    Click("middle", "D")
+}
+
+F6 Up:: {
+    Click("middle", "U")
+}
+
+; F7 = Right button
+F7:: {
+    Click("right", "D")
+    NudgeMouseRightLeft()
+}
+
 F7 Up:: {
-    global rightHeld
-    if rightHeld {
-        Click("right", "U")
-        rightHeld := false
-    }
+    Click("right", "U")
 }
 
 ; Optional: panic release if anything ever gets stuck
