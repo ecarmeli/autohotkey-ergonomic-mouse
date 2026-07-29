@@ -59,45 +59,82 @@ ApplyScrollLockState()
 }
 #SuspendExempt False
 
+; --- Hold-state flags (prevent repeated button-down events while a key is held) ---
+leftHeld   := false
+middleHeld := false
+rightHeld  := false
+
 ; -----------------------------------------------------------------
 ;  MAPPINGS (active only when not Suspended)
 ; -----------------------------------------------------------------
 
-; F5 = Left button
+; F5 = Left button (press=Down, release=Up) with anti-repeat + micro-nudge on first Down
 F5:: {
+    global leftHeld
+    if leftHeld
+        return
+
     Click("D")
+    leftHeld := true
     NudgeMouseRightLeft()
 }
 
 F5 Up:: {
+    global leftHeld
+
+    ; Always send the release event, even if internal state became desynchronized.
     Click("U")
+    leftHeld := false
 }
 
-; F6 = Middle button
+; F6 = Middle button (press=Down, release=Up) with anti-repeat
 F6:: {
+    global middleHeld
+    if middleHeld
+        return
+
     Click("middle", "D")
+    middleHeld := true
 }
 
 F6 Up:: {
+    global middleHeld
+
+    ; Always send the release event, even if internal state became desynchronized.
     Click("middle", "U")
+    middleHeld := false
 }
 
-; F7 = Right button
+; F7 = Right button (press=Down, release=Up) with anti-repeat + micro-nudge on first Down
 F7:: {
+    global rightHeld
+    if rightHeld
+        return
+
     Click("right", "D")
+    rightHeld := true
     NudgeMouseRightLeft()
 }
 
 F7 Up:: {
+    global rightHeld
+
+    ; Always send the release event, even if internal state became desynchronized.
     Click("right", "U")
+    rightHeld := false
 }
 
-; Optional: panic release if anything ever gets stuck
+; Panic release if anything ever gets stuck
 ^F12:: {
+    global leftHeld, middleHeld, rightHeld
+
     Click("U")
     Click("right", "U")
     Click("middle", "U")
-    ; Optional: TrayTip("Released all buttons", "", 600)
+
+    leftHeld := false
+    middleHeld := false
+    rightHeld := false
 }
 
 ; -----------------------------------------------------------------
