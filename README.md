@@ -150,3 +150,7 @@ The project features an automated, multi-tier GitHub Actions delivery structure 
   * **Stage 1: Build & Package (Windows):** Runs within a read-only permissions scope. It verifies the stable AutoHotkey core distribution via SHA256 hashes, injects runtime metadata into the Go binaries, compiles the executables, and packages them via Inno Setup. The unverified binaries and installer are saved to secure workflow storage.
   * **Stage 2: Independent Malware Scan (Linux):** Downloads the raw binaries and compiled installer into an isolated container environment. It executes targeted signature scans using **ClamAV** and **YARA**. If any vulnerabilities or suspicious capabilities are discovered, the step returns a fatal error, forcing a "fail-closed" termination.
   * **Stage 3: Conditional Production Release (Linux):** If and only if the malware and behavioral scans pass cleanly, this final stage pulls down the verified artifacts, auto-generates release notes, and publishes a formal, public production release asset.
+
+## License
+
+This project is licensed under the LICENSE.
