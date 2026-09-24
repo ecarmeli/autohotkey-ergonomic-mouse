@@ -1,31 +1,18 @@
-# autohotkey-ergonomic-mouse
+# Ergonomic Mouse Keys
 
 A deployment-ready AutoHotkey v2 solution for ergonomic keyboard-to-mouse mapping featuring automated background update detection.
 
-This project packages everything into a unified Windows installer executable (`ErgonomicMouseSetup.exe`) that handles clean deployments, native privilege handoffs, and silent uninstallation directly from the Windows App settings.
+This project packages everything into a unified Windows installer executable (`ErgonomicMouseSetup.exe`) that handles clean deployments, native privilege handoffs, and complete uninstallation through the Windows Apps settings.
+
+---
 
 ## 📥 Quick Start
+
 1. Download the latest `ErgonomicMouseSetup.exe` from the repository [Releases](https://github.com/ecarmeli/autohotkey-ergonomic-mouse/releases).
 2. Double-click the installer to launch the setup wizard.
-   * *Note on SmartScreen:* Because this is a free, open-source project, the installer is not signed with a commercial Authenticode certificate. If Windows SmartScreen appears, click **More info** followed by **Run anyway** to proceed.
+   * *Note on SmartScreen:* The installer is not signed with a commercial Authenticode certificate. If Windows SmartScreen appears, click **More info** followed by **Run anyway** to proceed. Download releases only from this repository.
 3. Follow the wizard instructions.
-
----
-
-## 🩺 Why This Project Exists: Vision & Objectives
-
-* **The Problem:** Traditional navigation forces your mouse hand to handle positioning, scrolling, and thousands of repetitive clicks daily, causing chronic finger/wrist strain and Repetitive Strain Injuries (RSI).
-* **The Solution:** Shifting primary mouse clicks directly to the keyboard's middle Function keys (`F5`-`F7`). By separating cursor movement from clicking, this project creates a balanced, two-handed workflow that minimizes mechanical fatigue on your primary joints.
-
----
-
-## ✨ Key Features & Ergonomic Design
-
-* **RSI Strain Relief:** Balances physical workload across both hands by moving high-frequency clicking tasks away from the mouse.
-* **Tendon Protection:** Holding down a key triggers a single continuous mouse click instead of sending rapid, exhausting inputs.
-* **Frictionless Drag-and-Drop:** An automatic 2px micro-movement triggers on initial click-hold, forcing picky applications or IDEs to register drag actions instantly without requiring a tense, heavy grip.
-* **Smooth Side-Scrolling:** Use `Shift + Scroll Wheel` to pan horizontally across wide data structures, codebases, or spreadsheets seamlessly.
-* **Instant Master Toggle:** Uses the physical `Scroll Lock` key (and its native hardware LED) as a global toggle to seamlessly transition between mouse mode and standard typing.
+4. Turn **Scroll Lock** on to enable the mappings.
 
 ---
 
@@ -33,54 +20,163 @@ This project packages everything into a unified Windows installer executable (`E
 
 | Input | Action | Behavior |
 | :--- | :--- | :--- |
-| **`Scroll Lock`** | Master Toggle | Enables (LED ON) or Disables (LED OFF) all mappings. |
-| **`F5`** | Left Mouse Click | Supports click-and-drag holding + micro-nudging. |
-| **`F6`** | Middle Mouse Click | Holds down middle click for canvas panning / hand-scrolling. |
-| **`F7`** | Right Mouse Click | Supports click-and-drag holding + micro-nudging. |
-| **`Shift + WheelUp`** | Horizontal Scroll Left | High-precision messaging bypasses OS inertia limits. |
-| **`Shift + WheelDown`** | Horizontal Scroll Right| High-precision messaging bypasses OS inertia limits. |
-| **`Ctrl + F12`** | Panic Release | Instantly forces a release of all virtual mouse buttons if stuck. |
+| **`Scroll Lock`** | Master Toggle | Enables (LED ON) or disables (LED OFF) all mappings. |
+| **`F5`** | Left Mouse Click | Supports click-and-drag holding and micro-nudging. |
+| **`F6`** | Middle Mouse Click | Holds down middle click for canvas panning and hand-scrolling. |
+| **`F7`** | Right Mouse Click | Supports click-and-drag holding and micro-nudging. |
+| **`Shift + WheelUp`** | Horizontal Scroll Left | Sends horizontal scrolling to the application under the pointer. |
+| **`Shift + WheelDown`** | Horizontal Scroll Right | Sends horizontal scrolling to the application under the pointer. |
+| **`Ctrl + F12`** | Panic Release | Forces the release of all virtual mouse buttons if one becomes stuck. |
+
+---
+
+## 🩺 Why Ergonomic Mouse Keys?
+
+Frequent mouse clicking can become uncomfortable during long work sessions. Ergonomic Mouse Keys moves common click actions to the keyboard, distributing input across both hands while leaving cursor movement on the mouse.
+
+This utility is not medical equipment and does not claim to prevent or treat repetitive strain injuries. Users experiencing persistent discomfort should seek appropriate professional advice.
+
+---
+
+## ✨ Key Features & Ergonomic Design
+
+* **Two-Handed Interaction:** Keeps cursor positioning on the mouse while moving frequent click actions to the keyboard.
+* **Press, Hold & Release Behavior:** Holding down a mapped key triggers one continuous mouse-button hold instead of repeated clicks.
+* **Frictionless Drag-and-Drop:** An automatic 2px micro-movement on initial click-hold helps applications and IDEs register drag actions consistently.
+* **Smooth Side-Scrolling:** Use `Shift + Scroll Wheel` to pan horizontally across wide data structures, codebases, and spreadsheets.
+* **Instant Master Toggle:** Uses the physical `Scroll Lock` key and its hardware LED as a global enable or disable control.
+* **Two Installation Scopes:** Supports current-user installation without administrator rights and all-users installation with elevation.
+* **Passive Update Detection:** Checks the latest published release and logs when a newer installer is available without silently replacing runtime files.
 
 ---
 
 ## 💻 Compatibility & System Requirements
 
-This solution is engineered to play nicely out of the box with core enterprise productivity software and development tools (e.g., Microsoft Edge, Office Suite, Visual Studio Code).
+This solution is designed to work with standard Windows input handling and has been used with core productivity software and development tools, including Microsoft Edge, Google Chrome, Microsoft Office, Visual Studio Code, and Notepad++.
 
 * **Operating System:** Microsoft Windows 10 or Windows 11 (64-bit architecture required).
-* **Dependencies:** None. The installer bundles core binary and compiled Go launcher modules out of the box.
-* **Hardware Interactivity:** Mappings take advantage of standard peripheral inputs. The Master Toggle relies on a physical `Scroll Lock` key layout; systems missing this physical key can trigger it via standard virtual keyboard overlays or alternate custom remappings.
+* **Dependencies:** None for normal use. The installer bundles the AutoHotkey runtime and compiled Go components.
+* **Administrative Rights:** Required only for an **All Users** installation.
+* **Hardware Interactivity:** The master toggle relies on the Windows `Scroll Lock` state. Systems without a physical Scroll Lock key can use the Windows On-Screen Keyboard or another remapping method.
+
+
 
 ---
 
-## 🛠️ Installation & Privileges
+## 🛠️ Installation Modes & Privileges
+ 
+The installer offers two modes:
+ 
+### Current User
+ 
+Installs Ergonomic Mouse Keys only for your Windows account.
+ 
+* Does not require administrator rights.
+* Installs to `%LocalAppData%\ErgonomicMouse`.
+* Starts automatically when you sign in.
+* Is the recommended choice when only you need the application.
+ 
+### All Users
+ 
+Installs Ergonomic Mouse Keys for everyone who uses the computer.
+ 
+* Requires administrator approval.
+* Installs to `%ProgramData%\ErgonomicMouse`.
+* Protects the installed files from modification by standard users.
+* Is recommended for shared computers or when the mappings must work with elevated applications.
+ 
+### Which Should I Choose?
+ 
+Choose **Current User** for a personal installation without administrator rights. Choose **All Users** for a shared computer or when you need to interact with applications running as administrator.
+ 
+> **Tip:** Double-click the installer to launch it normally. Choose **Current User** for your account, or **All Users** and approve the administrator prompt when asked.//
+ 
 
-The installation wizard dynamically adapts its execution layer based on user privilege:
+Only one installation mode can exist at a time. If Ergonomic Mouse Keys is already installed, the setup wizard will guide you through replacing it or switching installation modes.
 
-* **Current User (Standard Privilege):** Installs strictly within `%LocalAppData%\ErgonomicMouse` and registers interactive logon tasks. Ideal for restricted corporate environments without administrative rights.
-* **All Users (Elevated Privilege):** Installs globally to `%ProgramData%\ErgonomicMouse` and registers a Task Scheduler logon task intended to support interaction with elevated applications. 
+### Uninstallation
+
+Remove the application through the standard Windows Apps settings. The uninstaller removes the registered task, stops the matching AutoHotkey runtime, and removes installed files and operational logs.
 
 ---
 
 ## 🔐 Security Model
 
-The project enforces strict state management and separates runtime executables from user-writable operational data to prevent privilege escalation vectors.
+The project separates runtime executables from user-writable operational data and applies controls intended to reduce privilege-escalation and software-supply-chain risks.
 
-* **Cross-Scope Protection:** The installer enforces atomic execution contexts. To prevent orphaned deployments, it explicitly blocks installation if launched manually as an Administrator but configured for a "Current User" deployment. It also actively scans for existing user-mode installations across profiles to prevent split-brain duplications when elevating.
-* **Hermetic Directories:** In System Mode, runtime files are installed under `%ProgramData%\ErgonomicMouse`. This directory is actively hardened so standard users receive read/execute access only, preventing unauthorized modification of program files.
-* **Safe Log Routing:** Operational logs (for both the execution engine and the deployment manager) are never written to the protected system installation directory. They are securely routed to the interactive user's local profile at:
+* **Cross-Scope Protection:** The installer blocks a Current User installation when it was launched manually as Administrator. It also checks Windows user profiles for an existing user-mode installation to help prevent duplicate or orphaned deployments.
+* **Hardened System Directory:** In All Users mode, runtime files are installed under `%ProgramData%\ErgonomicMouse`. The directory is hardened so standard users receive read and execute access rather than modification access.
+* **Safe Log Routing:** Operational logs are routed to the interactive user's local profile rather than the protected system installation directory:
+
+  ```text
   %LocalAppData%\ErgonomicMouse\logs\launcher.log
   %LocalAppData%\ErgonomicMouse\logs\deploymanager.log
+  ```
+
+* **Pinned Workflow Dependencies:** Repository-owned GitHub Actions are pinned to immutable commit SHAs.
+* **Verified Runtime Dependency:** The AutoHotkey distribution downloaded during release builds is verified against a pinned SHA-256 digest.
+* **Fail-Closed Release Gating:** Production artifacts are published only after required quality, vulnerability, repository, and malware checks succeed.
+
+For vulnerability reporting, see [SECURITY.md](SECURITY.md).
 
 ---
 
 ## 🔄 Update & Lifecycle Model
 
-Ergonomic Mouse does not silently download or replace runtime files during startup.
+Ergonomic Mouse Keys does not silently download or replace runtime files during startup.
 
-`Launcher.exe` performs passive update detection only: it checks the latest published GitHub release, compares it with the installed version, and logs when a newer installer is available. Updates are delivered strictly through the full `ErgonomicMouseSetup.exe` installer so all components stay version-aligned.
+`Launcher.exe` performs passive update detection only. It checks the latest published GitHub release, compares it with the installed version, and logs when a newer installer is available. Updates are delivered through the complete `ErgonomicMouseSetup.exe` installer so all components remain version-aligned.
 
-The installer fully supports clean uninstallation and lifecycle management directly from the standard Windows Apps settings menu.
+The installer supports clean uninstallation and lifecycle management through the standard Windows Apps settings.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome.
+
+Before starting substantial work, open an issue to discuss the proposed change and confirm that it fits the project's scope.
+
+To contribute:
+
+1. Fork the repository and create a focused branch from `main`.
+2. Make the change and add or update tests where practical.
+3. Run the relevant local validation commands.
+4. Open a pull request describing the problem, the proposed change, and how it was tested.
+5. Ensure all required repository checks pass before merging.
+
+For general Go changes, run:
+
+```powershell
+go mod verify
+go test ./...
+go build ./...
+go vet ./...
+gofmt -w .
+go tool staticcheck ./...
+go tool govulncheck ./...
+```
+
+On Windows, the normal `go vet ./...` and `go tool staticcheck ./...` commands include the Windows-constrained `cmd/deploymanager` package. The repository CI workflow also performs explicit Windows-targeted analysis from its Linux runner.
+
+Please keep pull requests focused and avoid unrelated formatting, refactoring, or dependency changes.
+
+---
+
+## 🐞 Reporting Issues
+
+Use [GitHub Issues](https://github.com/ecarmeli/autohotkey-ergonomic-mouse/issues) for reproducible bugs, compatibility problems, and feature requests.
+
+Include the following information where relevant:
+
+* Windows version
+* Application version
+* Installation scope: Current User or All Users
+* Reproduction steps
+* Expected and actual behavior
+* Relevant launcher, deployment-manager, or installation logs
+
+Do not use public issues to report suspected security vulnerabilities. Follow the private reporting process described in [SECURITY.md](SECURITY.md).
 
 ---
 
@@ -91,33 +187,68 @@ autohotkey-ergonomic-mouse/
 │
 ├── .github/
 │   ├── workflows/
-│   │   ├── security-and-quality.yml   # CI: compilation validation, linting, security scanning
-│   │   └── build-and-release.yml      # CD: Automated Go compilation & Inno Setup packaging
-│   └── dependabot.yml
+│   │   ├── security-and-quality.yml        # CI: tests, builds, linting, and security scanning
+│   │   ├── build-and-release.yml           # CD: Go compilation, packaging, malware scan, and release
+│   │   └── monitor-autohotkey-version.yml  # Scheduled AutoHotkey security monitoring
+│   └── dependabot.yml                      # Go module and GitHub Actions dependency updates
 │
 ├── cmd/
 │   ├── launcher/
-│   │   └── main.go                    # Entry point binary; launches AHK and performs update detection
-│   └── deploymanager/ 
-│       └── main.go                    # Deployment engine; configures COM tasks & system ACLs
-│ 
-├── src/
-│   └── ErgonomicMouse.ahk             # Runtime AutoHotkey source script
+│   │   ├── main.go                         # Starts AHK and performs passive update detection
+│   │   └── main_test.go                    # Unit tests for deterministic version-handling logic
+│   └── deploymanager/
+│       └── main.go                         # Configures COM tasks, process cleanup, and system ACLs
 │
-├── installer.iss                      # Inno Setup blueprint compiler configuration
-├── go.mod                             # Go module definition
-├── go.sum                             # Dependency lock file
+├── src/
+│   └── ErgonomicMouse.ahk                  # Runtime AutoHotkey source script
+│
+├── installer.iss                           # Inno Setup compiler configuration
+├── go.mod                                  # Go module and tool definitions
+├── go.sum                                  # Dependency checksums
+├── LICENSE                                 # MIT License
+├── SECURITY.md                             # Vulnerability-reporting policy
 ├── .gitignore
 └── README.md
 ```
+
 ---
 
 ## ⚙️ Build & Development
 
-### Local Go Compilation
-To compile optimized, production-ready binaries locally without console windows popping into view, pass the optimized GUI link flags:
+### Prerequisites
+
+* Go version declared in `go.mod`
+* Inno Setup 6 or later
+* The verified AutoHotkey runtime files under `.\bin\AutoHotkey`
+
+### Local Validation
+
+Run the complete Go validation set before opening a pull request:
 
 ```powershell
+go mod verify
+go test ./...
+go build ./...
+go vet ./...
+gofmt -w .
+go tool staticcheck ./...
+go tool govulncheck ./...
+```
+
+To inspect individual launcher tests:
+
+```powershell
+go test -v ./cmd/launcher
+```
+
+### Local Go Compilation
+
+Run the following commands from the repository root to compile both Windows executables with version and build metadata:
+
+```powershell
+# Prepare the output directory
+New-Item -ItemType Directory -Path .\bin -Force | Out-Null
+
 # Declare versioning metadata
 $version = "1.0.0"
 $buildTime = Get-Date -Format "yyyy-MM-dd_HH:mm:ss"
@@ -128,29 +259,56 @@ $ldflags = "-s -w -H=windowsgui -X main.version=$version -X main.buildTime=$buil
 go build -ldflags "$ldflags" -o bin/Launcher.exe ./cmd/launcher
 go build -ldflags "$ldflags" -o bin/DeployManager.exe ./cmd/deploymanager
 ```
+
 ### Local Installer Compilation
-Ensure you have Inno Setup 6+ installed locally, pull the AutoHotkey binaries into your `.\bin\AutoHotkey` folder, and execute the compiler:
+
+Ensure that Inno Setup 6 or later is installed and that the verified AutoHotkey runtime files are present under `.\bin\AutoHotkey`, then run:
 
 ```powershell
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" .\installer.iss
 ```
 
+The local default installer version is a development placeholder. Production version metadata is injected by the tagged release workflow.
+
 ---
 
 ## 🛡️ CI/CD Pipeline & Security Gating
 
-The project features an automated, multi-tier GitHub Actions delivery structure utilizing cryptographically pinned action dependencies:
+The project uses GitHub Actions with cryptographically pinned action dependencies.
 
 ### 1. Security & Quality Pipeline (`security-and-quality.yml`)
-* Runs on every pull request to protect code integrity.
-* **Checks Include:** `go mod verify` module integrity checking, `go vet` static analysis, `staticcheck` advanced linter execution, `govulncheck` code vulnerability dependency tracking, and `trivy` scanning for secrets and repository configurations.
+
+* Runs on pull requests targeting `main`, pushes to `main`, and semantic-version release tags.
+* Verifies Go modules and runs launcher unit tests.
+* Builds the Go packages and validates formatting.
+* Runs `go vet` and Staticcheck for Linux and Windows package variants, including the Windows-constrained DeployManager package.
+* Runs `govulncheck` for reachable Go dependency vulnerabilities.
+* Uses Trivy to scan the repository for high and critical vulnerabilities, secrets, and configuration issues.
+* Cross-compiles the Windows binaries as a dry-run validation.
+
+CodeQL default setup separately performs semantic analysis for Go and GitHub Actions workflows. The default Go analysis follows the Linux package variant, while the repository-owned workflow provides explicit Windows-targeted analysis for DeployManager.
 
 ### 2. Build & Release Pipeline (`build-and-release.yml`)
-* Orchestrates an automated, 3-stage delivery pipeline split across isolated platforms for optimized execution:
-  * **Stage 1: Build & Package (Windows):** Runs within a read-only permissions scope. It verifies the stable AutoHotkey core distribution via SHA256 hashes, injects runtime metadata into the Go binaries, compiles the executables, and packages them via Inno Setup. The unverified binaries and installer are saved to secure workflow storage.
-  * **Stage 2: Independent Malware Scan (Linux):** Downloads the raw binaries and compiled installer into an isolated container environment. It executes targeted signature scans using **ClamAV** and **YARA**. If any vulnerabilities or suspicious capabilities are discovered, the step returns a fatal error, forcing a "fail-closed" termination.
-  * **Stage 3: Conditional Production Release (Linux):** If and only if the malware and behavioral scans pass cleanly, this final stage pulls down the verified artifacts, auto-generates release notes, and publishes a formal, public production release asset.
 
-## License
+The tagged release pipeline is divided into three stages:
 
-This project is licensed under the LICENSE.
+* **Stage 1: Build & Package (Windows):** Validates the tag, downloads and verifies the pinned AutoHotkey distribution, injects runtime metadata, compiles both Go executables, and packages the installer with Inno Setup.
+* **Stage 2: Independent Malware Scan (Linux):** Downloads the generated artifacts and scans them using **ClamAV** and **YARA**. A failed scan stops the release chain.
+* **Stage 3: Conditional Production Release (Linux):** Publishes the verified installer and generated release notes only when the required upstream jobs and malware scan succeed.
+
+### 3. Dependency Monitoring
+
+* Dependabot monitors Go modules and GitHub Actions dependencies.
+* A scheduled workflow monitors the pinned AutoHotkey release line for security-related upstream releases and advisories.
+
+---
+
+## 🔒 Security
+
+Do not report suspected vulnerabilities through public issues, discussions, or pull requests. Review [SECURITY.md](SECURITY.md) and use the repository's private vulnerability-reporting process.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
