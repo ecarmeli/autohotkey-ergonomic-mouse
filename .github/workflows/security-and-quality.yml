@@ -28,7 +28,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0       
         with:
-          go-version: '1.26.5'          # Specify Go version
+          go-version: '1.26.8'          # Specify Go version
           cache: true                   # Enable module caching (speeds up builds)
 
       - name: Verify Go Modules
@@ -76,7 +76,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.26.5'
+          go-version: '1.26.8'
 
       - name: Verify Go Modules
         run: go mod verify
