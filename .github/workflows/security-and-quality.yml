@@ -44,7 +44,7 @@ jobs:
         run: go vet ./...               # Static analysis for common coding mistakes
 
       - name: Check formatting
-        run: |
+        run: |                          # Check that all Go files are properly formatted with gofmt
           # Fail if any file is not properly formatted with gofmt
           if [ -n "$(gofmt -l .)" ]; then
             echo "Code is not formatted. Run gofmt."
@@ -53,22 +53,27 @@ jobs:
           fi
 
       - name: Run staticcheck
-        run: go tool staticcheck ./...
+        run: go tool staticcheck ./...  # Run static analysis for code quality and potential bugs
 
       - name: Run go vet (Windows target)
-        run: go vet ./...
+        run: go vet ./...               # Run go vet for Windows target to catch platform-specific issues
         env:
           GOOS: windows
           GOARCH: amd64
 
-      - name: Run staticcheck (Windows target)
-        run: go tool staticcheck ./...
+      - name: Build staticcheck for the Linux runner
+        run: |                          # Build staticcheck binary for the Linux runner to ensure compatibility with Windows target
+          go build -o "${RUNNER_TEMP}/staticcheck" honnef.co/go/tools/cmd/staticcheck
+
+      - name: Run staticcheck against the Windows target
+        run: |                          # Run staticcheck for Windows target to catch platform-specific issues
+          "${RUNNER_TEMP}/staticcheck" ./...
         env:
           GOOS: windows
           GOARCH: amd64
 
       - name: Build Windows binaries (Dry Run)
-        run: |
+        run: |                          # Build Windows binaries to ensure cross-compilation works correctly
           # Mirroring production linker flags for accurate dry-run validation
           GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -H=windowsgui" -o bin/Launcher.exe ./cmd/launcher
           GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -H=windowsgui" -o bin/DeployManager.exe ./cmd/deploymanager
