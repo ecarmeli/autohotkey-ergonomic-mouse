@@ -55,6 +55,18 @@ jobs:
       - name: Run staticcheck
         run: go tool staticcheck ./...
 
+      - name: Run go vet (Windows target)
+        run: go vet ./...
+        env:
+          GOOS: windows
+          GOARCH: amd64
+
+      - name: Run staticcheck (Windows target)
+        run: go tool staticcheck ./...
+        env:
+          GOOS: windows
+          GOARCH: amd64
+
       - name: Build Windows binaries (Dry Run)
         run: |
           # Mirroring production linker flags for accurate dry-run validation
