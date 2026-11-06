@@ -1,10 +1,10 @@
 module ergomanager
 
-go 1.26.8
+go 1.26.10
 
 require (
 	github.com/go-ole/go-ole v1.3.0
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 )
 
 require (
