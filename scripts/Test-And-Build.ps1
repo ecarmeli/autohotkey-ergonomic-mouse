@@ -52,6 +52,7 @@
 param(
     [Parameter(Position = 0)]
     [ValidatePattern('^v?\d+\.\d+\.\d+$')]
+    [Alias('v')]
     [string]$Version,
 
     [string]$OutputDirectory = 'bin'
@@ -368,8 +369,8 @@ Write-Step 'Updating and verifying module metadata'
 Invoke-Native go mod tidy
 Invoke-Native go mod verify
 if (git status --short -- go.mod go.sum) {
-    Write-Warning 'go mod tidy changed go.mod or go.sum. Review and commit those changes before merging or tagging.'
-    git diff -- go.mod go.sum
+    Write-Warning 'go.mod or go.sum has uncommitted changes. Review and commit them before merging or tagging.'
+    git --no-pager diff -- go.mod go.sum
 }
 
 Write-Step 'Checking and applying Go formatting'
