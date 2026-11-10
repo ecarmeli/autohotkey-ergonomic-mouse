@@ -78,8 +78,8 @@ jobs:
     - name: Download and Verify AutoHotkey Core
       run: |
         New-Item -ItemType Directory -Force -Path .\bin\AutoHotkey
-        $url = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.26/AutoHotkey_2.0.26.zip"
-        $expectedHash = "43522AA3122A57784AC5DB30ABF85C2244475C36ACD7796E2C993355F9E926AE"
+        $url = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.31/AutoHotkey_2.0.31.zip"
+        $expectedHash = "CA1A595ACA4528755D8D4CD7FED23D497A37BD9A0B6892072612D68DEE1BD00A"
         
         Invoke-WebRequest -Uri $url -OutFile .\ahk.zip
         $actualHash = (Get-FileHash .\ahk.zip -Algorithm SHA256).Hash.ToLower()
