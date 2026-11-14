@@ -350,7 +350,66 @@ if ($goVersionOutput -notmatch '^go version go([^\s]+) windows/') {
 }
 $installedGoVersion = $Matches[1]
 if ($installedGoVersion -ne $requiredGoVersion) {
-    throw "Go version mismatch. go.mod requires $requiredGoVersion, but local Go is $installedGoVersion."
+    $goExecutable = (Get-Command go -ErrorAction Stop).Source
+    $installedVersion = [version]$installedGoVersion
+    $requiredVersion = [version]$requiredGoVersion
+
+    if ($installedVersion -gt $requiredVersion) {
+        $message = @"
+Go version mismatch.
+
+Required by go.mod: $requiredGoVersion
+Currently installed: $installedGoVersion
+Active executable:    $goExecutable
+
+The installed Go version is newer than the version declared by the repository.
+
+If the repository should be upgraded to Go $installedGoVersion, run:
+  go mod edit -go=$installedGoVersion
+  go mod tidy
+
+Then review the changes:
+  git diff -- go.mod go.sum
+"@
+    }
+    else {
+        $message = @"
+Go version mismatch.
+
+Required by go.mod: $requiredGoVersion
+Currently installed: $installedGoVersion
+Active executable:    $goExecutable
+
+The installed Go version is older than the version required by the repository.
+
+Install Go $requiredGoVersion from:
+  https://go.dev/dl/
+
+Or, if installed through WinGet:
+  winget upgrade --id GoLang.Go --exact
+
+After installation, open a new PowerShell session and run:
+  go version
+  where.exe go
+"@
+    }
+
+    $exception = [System.InvalidOperationException]::new(
+        'The local Go toolchain does not match go.mod.'
+    )
+
+    $errorRecord = [System.Management.Automation.ErrorRecord]::new(
+        $exception,
+        'GoToolchainVersionMismatch',
+        [System.Management.Automation.ErrorCategory]::InvalidOperation,
+        $goExecutable
+    )
+
+    $errorRecord.ErrorDetails = [System.Management.Automation.ErrorDetails]::new(
+        $message
+    )
+
+    throw $errorRecord
 }
 Write-Host "Using Go $installedGoVersion with GOTOOLCHAIN=local"
 
